@@ -1,4 +1,4 @@
-import { BadgeCheck, Save } from 'lucide-react';
+import { BadgeCheck, Save, Workflow } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { CopyEditor } from '../components/CopyEditor';
@@ -29,9 +29,10 @@ export function ProductDetailPage({ id }: { id: number }) {
   };
 
   return (
-    <main className="page">
-      <div className="page-head">
+    <main className="page ai-page">
+      <div className="page-head ai-head">
         <div>
+          <span className="eyebrow"><Workflow size={14} />active generation task</span>
           <h1>{product.style_no || product.product_no}</h1>
           <p>{product.category_3} / {product.category_4} · {product.gender} · {product.season}</p>
         </div>

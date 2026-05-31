@@ -10,12 +10,12 @@ import { RuleManagePage } from './pages/RuleManagePage';
 import { SettingsPage } from './pages/SettingsPage';
 
 const nav = [
-  ['#/products', Shirt, '商品'],
-  ['#/excel-import', FileSpreadsheet, 'Excel'],
-  ['#/rules', Library, '规则'],
-  ['#/history-cases', History, '案例'],
-  ['#/learning', Sparkles, '学习'],
-  ['#/settings', Settings, '设置'],
+  ['#/products', Shirt, '任务'],
+  ['#/excel-import', FileSpreadsheet, '接入'],
+  ['#/rules', Library, '规则记忆'],
+  ['#/history-cases', History, '案例记忆'],
+  ['#/learning', Sparkles, '学习回路'],
+  ['#/settings', Settings, '模型状态'],
 ] as const;
 
 function useHashRoute() {
@@ -46,11 +46,11 @@ export function App() {
       <aside className="sidebar">
         <a className="brand" href="#/products">
           <Boxes size={24} />
-          <span>唯品童装文案</span>
+          <span>AI 童装文案舱</span>
         </a>
         <nav>
           {nav.map(([href, Icon, label]) => (
-            <a className={route.startsWith(href.replace('#', '')) || route === href ? 'active' : ''} href={href} key={href}>
+            <a className={route.startsWith(href) ? 'active' : ''} href={href} key={href}>
               <Icon size={18} />
               {label}
             </a>

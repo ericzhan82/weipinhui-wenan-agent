@@ -1,4 +1,4 @@
-import { Save } from 'lucide-react';
+import { Save, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../api/client';
 import { ProductForm } from '../components/ProductForm';
@@ -26,10 +26,11 @@ export function ProductCreatePage() {
   const [product, setProduct] = useState<Product>(emptyProduct);
   const [message, setMessage] = useState('');
   return (
-    <main className="page">
-      <div className="page-head">
+    <main className="page ai-page">
+      <div className="page-head ai-head">
         <div>
-          <h1>新建商品</h1>
+          <span className="eyebrow"><Sparkles size={14} />new context</span>
+          <h1>新建模型上下文</h1>
           <p>先建立模型上下文和颜色素材，再进入 AI 文案生成。</p>
         </div>
         <button className="primary" onClick={async () => {
