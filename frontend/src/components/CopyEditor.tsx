@@ -1,7 +1,34 @@
-import { CheckCircle2, Save, Sparkles, Wand2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  BrainCircuit,
+  CheckCircle2,
+  Circle,
+  Clock3,
+  Database,
+  FileCheck2,
+  FileJson,
+  ListChecks,
+  Loader2,
+  Save,
+  ShieldCheck,
+  Sparkles,
+  Wand2,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { CopyOutput, ValidationResult } from '../types';
 import { ValidationPanel } from './ValidationPanel';
+
+const generationSteps = [
+  { label: '商品资料', detail: '读取品类、FBA、场景与 SKC 色系', icon: Database },
+  { label: '规则与案例', detail: '装载禁用词、字数规则和历史优秀案例', icon: ListChecks },
+  { label: '模型生成', detail: '调用配置模型生成标题、卖点和颜色词', icon: BrainCircuit },
+  { label: 'JSON 解析', detail: '识别中英文字段并归一化输出结构', icon: FileJson },
+  { label: '校验修正', detail: '校验字数、空值和禁用词，必要时本地补全', icon: ShieldCheck },
+  { label: '版本落库', detail: '写入当前文案并生成可回滚版本', icon: FileCheck2 },
+];
+
+type BusyAction = '' | 'generate' | 'rewrite' | 'validate' | 'save';
+type ProcessStatus = 'idle' | 'running' | 'done' | 'error';
 
 type Props = {
   copy?: CopyOutput | null;
@@ -19,14 +46,36 @@ export function CopyEditor({ copy, onGenerate, onRewrite, onSave, onValidate }: 
   const [changeReason, setChangeReason] = useState('人工优化');
   const [instruction, setInstruction] = useState('标题更突出核心卖点，颜色词更适合夏季');
   const [validation, setValidation] = useState<ValidationResult | null>(null);
-  const [busyAction, setBusyAction] = useState('');
+  const [busyAction, setBusyAction] = useState<BusyAction>('');
   const [error, setError] = useState('');
+  const [processStatus, setProcessStatus] = useState<ProcessStatus>(copy ? 'done' : 'idle');
+  const [activeStep, setActiveStep] = useState(copy ? generationSteps.length - 1 : 0);
+  const [processStartedAt, setProcessStartedAt] = useState<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [lastDuration, setLastDuration] = useState<number | null>(null);
 
   useEffect(() => {
     setTitle(copy?.title || '');
     setTags([...(copy?.main_image_tags || []), '', '', ''].slice(0, 3));
     setColorCopy(copy?.color_copy || '');
   }, [copy]);
+
+  useEffect(() => {
+    if (processStatus !== 'running' || !processStartedAt) return undefined;
+    const timer = window.setInterval(() => {
+      const nextElapsed = Math.floor((Date.now() - processStartedAt) / 1000);
+      setElapsedSeconds(nextElapsed);
+      setActiveStep(Math.min(generationSteps.length - 1, Math.floor(nextElapsed / 3)));
+    }, 400);
+    return () => window.clearInterval(timer);
+  }, [processStartedAt, processStatus]);
+
+  useEffect(() => {
+    if (copy && processStatus === 'idle') {
+      setProcessStatus('done');
+      setActiveStep(generationSteps.length - 1);
+    }
+  }, [copy, processStatus]);
 
   const payload = {
     title,
@@ -35,13 +84,39 @@ export function CopyEditor({ copy, onGenerate, onRewrite, onSave, onValidate }: 
     operator_name: operatorName,
   };
 
-  const runAction = async (actionName: string, action: () => Promise<void>) => {
+  const processProgress = processStatus === 'done'
+    ? 100
+    : processStatus === 'running'
+      ? Math.min(92, 8 + (activeStep / (generationSteps.length - 1)) * 84)
+      : 0;
+
+  const runAction = async (actionName: BusyAction, action: () => Promise<void>) => {
     setError('');
     setBusyAction(actionName);
+    let actionStartedAt: number | null = null;
+    if (actionName === 'generate') {
+      actionStartedAt = Date.now();
+      setProcessStatus('running');
+      setProcessStartedAt(actionStartedAt);
+      setElapsedSeconds(0);
+      setLastDuration(null);
+      setActiveStep(0);
+    }
     try {
       await action();
+      if (actionName === 'generate') {
+        const duration = actionStartedAt ? Math.max(1, Math.ceil((Date.now() - actionStartedAt) / 1000)) : elapsedSeconds;
+        setLastDuration(duration);
+        setElapsedSeconds(duration);
+        setActiveStep(generationSteps.length - 1);
+        setProcessStatus('done');
+      }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
+      const nextError = caught instanceof Error ? caught.message : String(caught);
+      setError(nextError);
+      if (actionName === 'generate') {
+        setProcessStatus('error');
+      }
     } finally {
       setBusyAction('');
     }
@@ -67,6 +142,51 @@ export function CopyEditor({ copy, onGenerate, onRewrite, onSave, onValidate }: 
         </div>
       </div>
       {error && <p className="notice error">{error}</p>}
+      <div className={`generation-process ${processStatus}`}>
+        <div className="process-topline">
+          <div>
+            <h3><BrainCircuit size={18} />AI 生成过程</h3>
+            <p>
+              {processStatus === 'running' && `运行中 · ${elapsedSeconds}s`}
+              {processStatus === 'done' && `已完成${lastDuration ? ` · ${lastDuration}s` : ''}`}
+              {processStatus === 'error' && '生成中断'}
+              {processStatus === 'idle' && '待启动'}
+            </p>
+          </div>
+          <span className="process-chip">
+            {processStatus === 'running' && <Loader2 size={14} className="spin" />}
+            {processStatus === 'done' && <CheckCircle2 size={14} />}
+            {processStatus === 'error' && <AlertTriangle size={14} />}
+            {processStatus === 'idle' && <Clock3 size={14} />}
+            {copy?.llm_model || 'AI Agent'}
+          </span>
+        </div>
+        <div className="process-meter" aria-hidden="true">
+          <span style={{ width: `${processProgress}%` }} />
+        </div>
+        <ol className="process-steps">
+          {generationSteps.map((step, index) => {
+            const Icon = step.icon;
+            const stepState = processStatus === 'done' || index < activeStep ? 'done' : index === activeStep ? processStatus : 'waiting';
+            return (
+              <li key={step.label} className={stepState}>
+                <span className="step-icon">
+                  {stepState === 'done' ? <CheckCircle2 size={16} /> : stepState === 'running' ? <Loader2 size={16} className="spin" /> : stepState === 'error' ? <AlertTriangle size={16} /> : <Circle size={16} />}
+                </span>
+                <span className="step-body">
+                  <b><Icon size={14} />{step.label}</b>
+                  <small>{step.detail}</small>
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+        <div className="process-evidence">
+          <span><b>输入</b>{payload.main_image_tags.length ? `${payload.main_image_tags.length} 个卖点草稿` : '商品资料 + 规则库'}</span>
+          <span><b>输出</b>{title ? `${title.length} 字标题 / ${payload.main_image_tags.length} 个主图卖点` : '等待生成'}</span>
+          <span><b>依据</b>{copy?.source_basis || '生成后展示模型依据'}</span>
+        </div>
+      </div>
       <div className="form-grid">
         <label className="span-2">
           <span>唯品标题 <b className={title.length === 29 || title.length === 30 ? 'ok' : 'bad'}>{title.length}/29-30</b></span>
