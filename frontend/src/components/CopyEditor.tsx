@@ -9,9 +9,11 @@ import {
   FileJson,
   ListChecks,
   Loader2,
+  MessageSquareText,
   Save,
   ShieldCheck,
   Sparkles,
+  Target,
   Wand2,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -25,6 +27,12 @@ const generationSteps = [
   { label: 'JSON 解析', detail: '识别中英文字段并归一化输出结构', icon: FileJson },
   { label: '校验修正', detail: '校验字数、空值和禁用词，必要时本地补全', icon: ShieldCheck },
   { label: '版本落库', detail: '写入当前文案并生成可回滚版本', icon: FileCheck2 },
+];
+
+const rewritePresets = [
+  '标题更突出核心卖点，颜色词更适合夏季',
+  '更像唯品会主图文案，表达更短更有货架感',
+  '减少夸张词，突出面料舒适和穿着场景',
 ];
 
 type BusyAction = '' | 'generate' | 'rewrite' | 'validate' | 'save';
@@ -123,25 +131,61 @@ export function CopyEditor({ copy, onGenerate, onRewrite, onSave, onValidate }: 
   };
 
   return (
-    <section className="panel copy-panel">
+    <section className="panel copy-panel ai-workbench">
       <div className="panel-head">
-        <h2>文案生成与编辑</h2>
+        <div>
+          <h2>AI 文案工作台</h2>
+          <p className="muted">把商品资料交给模型生成首版文案，再由运营按意图接管和定稿。</p>
+        </div>
         <div className="toolbar">
-          <button title="生成文案" disabled={Boolean(busyAction)} onClick={() => runAction('generate', async () => { await onGenerate(); })}>
-            <Sparkles size={16} />{busyAction === 'generate' ? '生成中' : '生成'}
+          <button className="primary" title="生成文案" disabled={Boolean(busyAction)} onClick={() => runAction('generate', async () => { await onGenerate(); })}>
+            <Sparkles size={16} />{busyAction === 'generate' ? '生成中' : '启动生成'}
           </button>
           <button title="重写文案" disabled={Boolean(busyAction)} onClick={() => runAction('rewrite', async () => { await onRewrite(instruction); })}>
-            <Wand2 size={16} />{busyAction === 'rewrite' ? '重写中' : '重写'}
+            <Wand2 size={16} />{busyAction === 'rewrite' ? '重写中' : '按意图重写'}
           </button>
           <button title="校验文案" disabled={Boolean(busyAction)} onClick={() => runAction('validate', async () => { setValidation(await onValidate(payload)); })}>
-            <CheckCircle2 size={16} />{busyAction === 'validate' ? '校验中' : '校验'}
+            <CheckCircle2 size={16} />{busyAction === 'validate' ? '校验中' : '规则校验'}
           </button>
           <button title="保存文案" disabled={Boolean(busyAction)} onClick={() => runAction('save', async () => { await onSave({ ...payload, change_reason: changeReason }); })}>
-            <Save size={16} />{busyAction === 'save' ? '保存中' : '保存'}
+            <Save size={16} />{busyAction === 'save' ? '保存中' : '保存版本'}
           </button>
         </div>
       </div>
       {error && <p className="notice error">{error}</p>}
+      <div className="ai-task-board">
+        <div className="task-card task-objective">
+          <span className="task-eyebrow"><Target size={14} />模型任务</span>
+          <strong>生成一版可上架的唯品童装文案</strong>
+          <p>目标是一次产出标题、主图卖点和颜色词，并在生成后进入可编辑草稿。</p>
+        </div>
+        <div className="task-card">
+          <span className="task-eyebrow"><Database size={14} />输入上下文</span>
+          <div className="task-pills">
+            <span>商品资料</span>
+            <span>FBA 卖点</span>
+            <span>规则库</span>
+            <span>历史案例</span>
+          </div>
+        </div>
+        <div className="task-card">
+          <span className="task-eyebrow"><FileCheck2 size={14} />输出契约</span>
+          <div className="task-contract">
+            <span>标题 29-30 字</span>
+            <span>3 个主图卖点</span>
+            <span>颜色词 4-6 字</span>
+          </div>
+        </div>
+        <div className="task-card task-command">
+          <span className="task-eyebrow"><MessageSquareText size={14} />下一轮意图</span>
+          <textarea rows={3} value={instruction} onChange={(event) => setInstruction(event.target.value)} />
+          <div className="intent-chips">
+            {rewritePresets.map((preset) => (
+              <button type="button" key={preset} onClick={() => setInstruction(preset)}>{preset}</button>
+            ))}
+          </div>
+        </div>
+      </div>
       <div className={`generation-process ${processStatus}`}>
         <div className="process-topline">
           <div>
@@ -187,6 +231,15 @@ export function CopyEditor({ copy, onGenerate, onRewrite, onSave, onValidate }: 
           <span><b>依据</b>{copy?.source_basis || '生成后展示模型依据'}</span>
         </div>
       </div>
+      <div className="output-head">
+        <div>
+          <h3>模型输出草稿</h3>
+          <p>字段仍可人工接管，保存后才进入正式版本。</p>
+        </div>
+        <span className={title || payload.main_image_tags.length || colorCopy ? 'draft-state ready' : 'draft-state'}>
+          {title || payload.main_image_tags.length || colorCopy ? '有草稿' : '等待生成'}
+        </span>
+      </div>
       <div className="form-grid">
         <label className="span-2">
           <span>唯品标题 <b className={title.length === 29 || title.length === 30 ? 'ok' : 'bad'}>{title.length}/29-30</b></span>
@@ -209,10 +262,6 @@ export function CopyEditor({ copy, onGenerate, onRewrite, onSave, onValidate }: 
         <label>
           <span>保存原因</span>
           <input value={changeReason} onChange={(event) => setChangeReason(event.target.value)} />
-        </label>
-        <label className="span-2">
-          <span>重写要求</span>
-          <input value={instruction} onChange={(event) => setInstruction(event.target.value)} />
         </label>
       </div>
       <ValidationPanel result={validation} />
