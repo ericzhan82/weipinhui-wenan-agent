@@ -1,4 +1,6 @@
+import json
 import os
+import re
 
 from sqlalchemy.orm import Session
 
@@ -7,6 +9,117 @@ from app.services.copy_validator import validate_copy_payload
 from app.services.llm import get_llm_client
 from app.services.prompt_builder import build_generation_messages, build_rewrite_messages
 from app.services.version_service import create_copy_version
+
+
+TITLE_KEYS = ("title", "标题", "商品标题", "唯品标题", "vip_title")
+TAG_KEYS = (
+    "main_image_tags",
+    "mainImageTags",
+    "main_image_selling_points",
+    "主图卖点",
+    "主图打标卖点",
+    "主图标签",
+    "卖点标签",
+    "卖点",
+)
+COLOR_KEYS = ("color_copy", "colorCopy", "颜色词文案", "颜色文案", "颜色词", "色彩文案")
+SOURCE_KEYS = ("source_basis", "sourceBasis", "生成依据", "来源依据", "依据")
+WARNING_KEYS = ("warnings", "风险提示", "提醒")
+NESTED_PAYLOAD_KEYS = ("copy", "copy_output", "result", "data", "文案", "生成文案")
+
+
+def _has_content(value) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, tuple, set, dict)):
+        return bool(value)
+    return True
+
+
+def _lookup(payload: dict, keys: tuple[str, ...]):
+    for key in keys:
+        value = payload.get(key)
+        if _has_content(value):
+            return value
+    for nested_key in NESTED_PAYLOAD_KEYS:
+        nested = payload.get(nested_key)
+        if isinstance(nested, dict):
+            value = _lookup(nested, keys)
+            if _has_content(value):
+                return value
+    return None
+
+
+def _text(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, (list, tuple)):
+        return "".join(str(item).strip() for item in value if str(item).strip())
+    return str(value).strip()
+
+
+def _tags(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [item.strip() for item in re.split(r"[\n,，、;；]+", value) if item.strip()]
+    if isinstance(value, dict):
+        value = value.values()
+    if isinstance(value, (list, tuple, set)):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return [str(value).strip()] if str(value).strip() else []
+
+
+def _normalize_llm_payload(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        return {}
+    normalized = dict(payload)
+    normalized["title"] = _text(_lookup(payload, TITLE_KEYS))
+    normalized["main_image_tags"] = _tags(_lookup(payload, TAG_KEYS))
+    normalized["color_copy"] = _text(_lookup(payload, COLOR_KEYS))
+    normalized["source_basis"] = _text(_lookup(payload, SOURCE_KEYS)) or payload.get("source_basis")
+    warnings = _lookup(payload, WARNING_KEYS)
+    normalized["warnings"] = warnings if isinstance(warnings, list) else []
+    return normalized
+
+
+def _validate_generated_payload(payload: dict, rules: list[Rule], product: Product) -> dict:
+    return validate_copy_payload(
+        payload.get("title"),
+        payload.get("main_image_tags"),
+        payload.get("color_copy"),
+        forbidden_terms=_forbidden_terms(rules),
+        required_basis_fields={"fba": product.fba, "category_3": product.category_3},
+    )
+
+
+def _max_attempts() -> int:
+    try:
+        retries = int(os.getenv("LLM_MAX_RETRIES", "2"))
+    except ValueError:
+        retries = 2
+    return max(1, retries + 1)
+
+
+def _repair_messages(messages: list[dict], payload: dict, validation: dict) -> list[dict]:
+    return [
+        *messages,
+        {
+            "role": "user",
+            "content": (
+                "上一轮文案校验未通过，请只输出修正后的JSON对象，不要解释。"
+                "字段名必须严格使用 title、main_image_tags、color_copy、source_basis、warnings。"
+                "title必须为29-30个中文字符；main_image_tags必须为数组，且每项4-10个字符；"
+                "color_copy必须为4-6个字符。"
+                f"\n上一轮输出：{json.dumps(payload, ensure_ascii=False)}"
+                f"\n校验错误：{json.dumps(validation['errors'], ensure_ascii=False)}"
+            ),
+        },
+    ]
 
 
 def product_to_dict(product: Product) -> dict:
@@ -106,26 +219,29 @@ def generate_copy_for_product(db: Session, product_id: int, operator_name: str =
     product_payload = product_to_dict(product)
     client = get_llm_client()
     messages = build_generation_messages(product_payload, [rule.content for rule in rules], _history(db, product))
-    payload = client.generate_json(messages, schema_hint={"product": product_payload})
-    validation = validate_copy_payload(
-        payload.get("title"),
-        payload.get("main_image_tags"),
-        payload.get("color_copy"),
-        forbidden_terms=_forbidden_terms(rules),
-        required_basis_fields={"fba": product.fba, "category_3": product.category_3},
-    )
+    payload = _normalize_llm_payload(client.generate_json(messages, schema_hint={"product": product_payload}))
+    validation = _validate_generated_payload(payload, rules, product)
+    attempt = 1
+    while (
+        not validation["passed"]
+        and os.getenv("LLM_PROVIDER", "mock") != "mock"
+        and attempt < _max_attempts()
+    ):
+        repair_messages = _repair_messages(messages, payload, validation)
+        payload = _normalize_llm_payload(
+            client.generate_json(
+                repair_messages,
+                schema_hint={"product": product_payload, "previous": payload, "validation": validation},
+            )
+        )
+        validation = _validate_generated_payload(payload, rules, product)
+        attempt += 1
     if not validation["passed"]:
         if os.getenv("LLM_PROVIDER", "mock") == "mock":
             from app.services.llm.mock_client import MockClient
 
-            payload = MockClient().generate_json(messages, schema_hint={"product": product_payload})
-            validation = validate_copy_payload(
-                payload.get("title"),
-                payload.get("main_image_tags"),
-                payload.get("color_copy"),
-                forbidden_terms=_forbidden_terms(rules),
-                required_basis_fields={"fba": product.fba, "category_3": product.category_3},
-            )
+            payload = _normalize_llm_payload(MockClient().generate_json(messages, schema_hint={"product": product_payload}))
+            validation = _validate_generated_payload(payload, rules, product)
         if not validation["passed"]:
             raise ValueError({"message": "文案生成后校验未通过", "validation": validation})
     output = _upsert_copy_output(db, product, payload, operator_name, "model_generated", "模型生成")
@@ -166,7 +282,7 @@ def rewrite_copy_for_product(db: Session, product_id: int, instruction: str, ope
     }
     client = get_llm_client()
     messages = build_rewrite_messages(product_to_dict(product), current_payload, instruction, [rule.content for rule in rules])
-    payload = client.generate_json(messages, schema_hint={"product": product_to_dict(product), "current": current_payload})
+    payload = _normalize_llm_payload(client.generate_json(messages, schema_hint={"product": product_to_dict(product), "current": current_payload}))
     if instruction and "防晒" in instruction:
         payload["title"] = payload["title"].replace("舒适", "防晒", 1)
     validation = validate_copy_payload(
