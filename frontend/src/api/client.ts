@@ -11,6 +11,36 @@ import type {
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
+function formatUnknown(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) {
+    return value.map(formatUnknown).filter(Boolean).join('；');
+  }
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const message = formatUnknown(record.message || record.msg || record.error);
+    const validation = record.validation as Record<string, unknown> | undefined;
+    const validationErrors = validation ? formatUnknown(validation.errors) : '';
+    const validationWarnings = validation ? formatUnknown(validation.warnings) : '';
+    return [message, validationErrors && `校验错误：${validationErrors}`, validationWarnings && `校验提醒：${validationWarnings}`]
+      .filter(Boolean)
+      .join('；') || JSON.stringify(value);
+  }
+  return String(value);
+}
+
+function formatApiError(detail: string, status: number): string {
+  if (!detail) return `HTTP ${status}`;
+  try {
+    const parsed = JSON.parse(detail) as { detail?: unknown };
+    return formatUnknown(parsed.detail ?? parsed) || `HTTP ${status}`;
+  } catch {
+    return detail;
+  }
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     headers: options.body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
@@ -18,14 +48,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
   if (!response.ok) {
     const detail = await response.text();
-    let parsedDetail = '';
-    try {
-      const parsed = JSON.parse(detail);
-      parsedDetail = parsed.detail || '';
-    } catch {
-      parsedDetail = '';
-    }
-    throw new Error(parsedDetail || detail || `HTTP ${response.status}`);
+    throw new Error(formatApiError(detail, response.status));
   }
   return response.json() as Promise<T>;
 }
