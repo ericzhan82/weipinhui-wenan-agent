@@ -99,9 +99,9 @@ def _validate_generated_payload(payload: dict, rules: list[Rule], product: Produ
 
 def _max_attempts() -> int:
     try:
-        retries = int(os.getenv("LLM_MAX_RETRIES", "2"))
+        retries = int(os.getenv("LLM_MAX_RETRIES", "0"))
     except ValueError:
-        retries = 2
+        retries = 0
     return max(1, retries + 1)
 
 
@@ -120,6 +120,40 @@ def _repair_messages(messages: list[dict], payload: dict, validation: dict) -> l
             ),
         },
     ]
+
+
+def _valid_title(value: str | None) -> bool:
+    return len((value or "").strip()) in (29, 30)
+
+
+def _valid_tags(value: list[str] | None) -> bool:
+    tags = _tags(value)
+    return bool(tags) and all(4 <= len(tag) <= 10 for tag in tags)
+
+
+def _valid_color_copy(value: str | None) -> bool:
+    return 4 <= len((value or "").strip()) <= 6
+
+
+def _locally_repair_payload(payload: dict, product_payload: dict) -> dict:
+    from app.services.llm.mock_client import MockClient
+
+    fallback = MockClient().generate_json([], schema_hint={"product": product_payload})
+    repaired = dict(payload)
+    if not _valid_title(repaired.get("title")):
+        repaired["title"] = fallback["title"]
+    if not _valid_tags(repaired.get("main_image_tags")):
+        repaired["main_image_tags"] = fallback["main_image_tags"]
+    if not _valid_color_copy(repaired.get("color_copy")):
+        repaired["color_copy"] = fallback["color_copy"]
+    if not _has_content(repaired.get("source_basis")):
+        repaired["source_basis"] = "模型输出未通过校验，系统根据商品资料自动补全"
+    warnings = repaired.get("warnings") if isinstance(repaired.get("warnings"), list) else []
+    repaired["warnings"] = [
+        *warnings,
+        {"field": "copy", "message": "模型输出未通过校验，已根据商品资料自动补全", "value": "local_repair"},
+    ]
+    return _normalize_llm_payload(repaired)
 
 
 def product_to_dict(product: Product) -> dict:
@@ -221,6 +255,12 @@ def generate_copy_for_product(db: Session, product_id: int, operator_name: str =
     messages = build_generation_messages(product_payload, [rule.content for rule in rules], _history(db, product))
     payload = _normalize_llm_payload(client.generate_json(messages, schema_hint={"product": product_payload}))
     validation = _validate_generated_payload(payload, rules, product)
+    if not validation["passed"]:
+        repaired_payload = _locally_repair_payload(payload, product_payload)
+        repaired_validation = _validate_generated_payload(repaired_payload, rules, product)
+        if repaired_validation["passed"]:
+            payload = repaired_payload
+            validation = repaired_validation
     attempt = 1
     while (
         not validation["passed"]

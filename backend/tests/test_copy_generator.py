@@ -84,8 +84,8 @@ def test_generation_accepts_chinese_llm_field_names(monkeypatch):
     assert db.query(CopyOutput).count() == 1
 
 
-def test_generation_retries_invalid_llm_output_with_validation_feedback(monkeypatch):
-    class RetryClient:
+def test_generation_repairs_invalid_llm_output_without_extra_model_call(monkeypatch):
+    class InvalidClient:
         provider = "openai_compatible"
         model = "fake"
 
@@ -94,17 +94,9 @@ def test_generation_retries_invalid_llm_output_with_validation_feedback(monkeypa
 
         def generate_json(self, messages, schema_hint=None):
             self.calls += 1
-            if self.calls == 1:
-                return {"title": "防晒衣", "main_image_tags": [], "color_copy": ""}
-            assert "校验未通过" in messages[-1]["content"]
-            return {
-                "title": "清凉防晒中大童女童防晒衣夏季出游轻薄舒适百搭好穿活力日常自在",
-                "main_image_tags": ["清凉防晒", "透气不闷", "出游好穿"],
-                "color_copy": "清爽显白",
-                "source_basis": "根据FBA、品类、季节和场景生成",
-            }
+            return {"title": "防晒衣", "main_image_tags": [], "color_copy": ""}
 
-    client = RetryClient()
+    client = InvalidClient()
     monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
     monkeypatch.setenv("LLM_MAX_RETRIES", "2")
     monkeypatch.setattr("app.services.copy_generator.get_llm_client", lambda: client)
@@ -116,6 +108,7 @@ def test_generation_retries_invalid_llm_output_with_validation_feedback(monkeypa
 
     payload = generate_copy_for_product(db, product.id, operator_name="tester")
 
-    assert client.calls == 2
-    assert payload["title"] == "清凉防晒中大童女童防晒衣夏季出游轻薄舒适百搭好穿活力日常自在"
+    assert client.calls == 1
+    assert len(payload["title"]) in (29, 30)
     assert payload["main_image_tags"] == ["清凉防晒", "透气不闷", "出游好穿"]
+    assert payload["color_copy"] == "清爽显白"

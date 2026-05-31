@@ -14,7 +14,7 @@ class OpenAICompatibleClient(LlmClient):
         self.api_key = os.getenv("LLM_API_KEY", "")
         self.base_url = os.getenv("LLM_BASE_URL", "").rstrip("/")
         self.model = os.getenv("LLM_MODEL", "mock")
-        self.timeout = int(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
+        self.timeout = int(os.getenv("LLM_TIMEOUT_SECONDS", "90"))
         self.temperature = float(os.getenv("LLM_TEMPERATURE", "0.4"))
 
     def generate_json(self, messages: list[dict], schema_hint: dict | None = None) -> dict:
