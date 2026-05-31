@@ -108,6 +108,7 @@ th { color: #4b5563; font-size: 13px; font-weight: 700; }
 td input { min-width: 120px; }
 .status { background: #e8f4f1; border-radius: 999px; color: var(--accent-dark); display: inline-block; padding: 3px 8px; }
 .notice { background: #ecfdf5; border: 1px solid #bbf7d0; border-radius: 8px; color: #166534; padding: 10px 12px; }
+.notice.error { background: #fff1f2; border-color: #fecdd3; color: #9f1239; }
 
 .copy-panel .validation { margin-top: 14px; }
 .validation { border-radius: 8px; padding: 12px; }

@@ -19,6 +19,8 @@ export function CopyEditor({ copy, onGenerate, onRewrite, onSave, onValidate }: 
   const [changeReason, setChangeReason] = useState('人工优化');
   const [instruction, setInstruction] = useState('标题更突出核心卖点，颜色词更适合夏季');
   const [validation, setValidation] = useState<ValidationResult | null>(null);
+  const [busyAction, setBusyAction] = useState('');
+  const [error, setError] = useState('');
 
   useEffect(() => {
     setTitle(copy?.title || '');
@@ -33,17 +35,38 @@ export function CopyEditor({ copy, onGenerate, onRewrite, onSave, onValidate }: 
     operator_name: operatorName,
   };
 
+  const runAction = async (actionName: string, action: () => Promise<void>) => {
+    setError('');
+    setBusyAction(actionName);
+    try {
+      await action();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setBusyAction('');
+    }
+  };
+
   return (
     <section className="panel copy-panel">
       <div className="panel-head">
         <h2>文案生成与编辑</h2>
         <div className="toolbar">
-          <button title="生成文案" onClick={onGenerate}><Sparkles size={16} />生成</button>
-          <button title="重写文案" onClick={() => onRewrite(instruction)}><Wand2 size={16} />重写</button>
-          <button title="校验文案" onClick={async () => setValidation(await onValidate(payload))}><CheckCircle2 size={16} />校验</button>
-          <button title="保存文案" onClick={() => onSave({ ...payload, change_reason: changeReason })}><Save size={16} />保存</button>
+          <button title="生成文案" disabled={Boolean(busyAction)} onClick={() => runAction('generate', async () => { await onGenerate(); })}>
+            <Sparkles size={16} />{busyAction === 'generate' ? '生成中' : '生成'}
+          </button>
+          <button title="重写文案" disabled={Boolean(busyAction)} onClick={() => runAction('rewrite', async () => { await onRewrite(instruction); })}>
+            <Wand2 size={16} />{busyAction === 'rewrite' ? '重写中' : '重写'}
+          </button>
+          <button title="校验文案" disabled={Boolean(busyAction)} onClick={() => runAction('validate', async () => { setValidation(await onValidate(payload)); })}>
+            <CheckCircle2 size={16} />{busyAction === 'validate' ? '校验中' : '校验'}
+          </button>
+          <button title="保存文案" disabled={Boolean(busyAction)} onClick={() => runAction('save', async () => { await onSave({ ...payload, change_reason: changeReason }); })}>
+            <Save size={16} />{busyAction === 'save' ? '保存中' : '保存'}
+          </button>
         </div>
       </div>
+      {error && <p className="notice error">{error}</p>}
       <div className="form-grid">
         <label className="span-2">
           <span>唯品标题 <b className={title.length === 29 || title.length === 30 ? 'ok' : 'bad'}>{title.length}/29-30</b></span>

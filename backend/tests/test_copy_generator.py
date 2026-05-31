@@ -6,7 +6,9 @@ from app.models import CopyOutput, CopyVersion, Product, Rule
 from app.services.copy_generator import generate_copy_for_product
 
 
-def test_mock_generation_creates_output_and_model_version():
+def test_mock_generation_creates_output_and_model_version(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    monkeypatch.setenv("LLM_MODEL", "mock")
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)

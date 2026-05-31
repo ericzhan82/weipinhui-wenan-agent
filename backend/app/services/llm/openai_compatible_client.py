@@ -21,14 +21,19 @@ class OpenAICompatibleClient(LlmClient):
         if not self.api_key or not self.base_url or not self.model:
             raise RuntimeError("openai-compatible模式需要配置LLM_API_KEY、LLM_BASE_URL、LLM_MODEL")
 
-        response = requests.post(
-            f"{self.base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
-            json={"model": self.model, "messages": messages, "temperature": self.temperature},
-            timeout=self.timeout,
-        )
+        try:
+            response = requests.post(
+                f"{self.base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+                json={"model": self.model, "messages": messages, "temperature": self.temperature},
+                timeout=self.timeout,
+            )
+        except requests.exceptions.Timeout as exc:
+            raise RuntimeError(f"模型接口调用超时：{self.timeout}秒内没有返回，请检查模型服务、网络或调低输入复杂度") from exc
+        except requests.exceptions.RequestException as exc:
+            raise RuntimeError(f"模型接口请求失败：{exc}") from exc
         if response.status_code >= 400:
-            raise RuntimeError(f"模型接口调用失败：HTTP {response.status_code}")
+            raise RuntimeError(f"模型接口调用失败：HTTP {response.status_code}，{response.text[:300]}")
         body = response.json()
         content = body["choices"][0]["message"]["content"]
         return self._parse_json(content)
