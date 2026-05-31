@@ -111,6 +111,144 @@ td input { min-width: 120px; }
 .notice { background: #ecfdf5; border: 1px solid #bbf7d0; border-radius: 8px; color: #166534; padding: 10px 12px; }
 .notice.error { background: #fff1f2; border-color: #fecdd3; color: #9f1239; }
 
+.context-composer { display: grid; gap: 16px; }
+.context-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+}
+.context-head h2, .color-context-panel h2 {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+.context-head p {
+  color: var(--muted);
+  margin: 4px 0 0;
+}
+.context-score {
+  background: #17242b;
+  border-radius: 8px;
+  color: #f8fafc;
+  display: grid;
+  flex: 0 0 112px;
+  justify-items: center;
+  padding: 10px;
+}
+.context-score strong { font-size: 28px; line-height: 1; }
+.context-score span { color: #cbd5e1; font-size: 12px; margin-top: 3px; }
+.context-map {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.context-slot {
+  align-items: center;
+  background: #fff;
+  border: 1px solid rgba(180, 35, 24, .18);
+  border-radius: 8px;
+  color: var(--danger);
+  display: grid;
+  gap: 4px;
+  min-height: 82px;
+  padding: 10px;
+}
+.context-slot.ready {
+  border-color: rgba(21, 128, 61, .22);
+  color: var(--ok);
+}
+.context-slot span { color: #667085; font-size: 12px; }
+.context-slot b { color: #223036; font-size: 16px; }
+.context-brief {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: .9fr 1.1fr;
+}
+.context-brief > div {
+  background: #fff;
+  border: 1px solid rgba(31, 42, 48, .1);
+  border-radius: 8px;
+  padding: 12px;
+}
+.context-brief span, .raw-context h3 {
+  align-items: center;
+  color: #667085;
+  display: flex;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.context-brief strong {
+  display: block;
+  font-size: 16px;
+  line-height: 1.4;
+}
+.context-brief p { color: #344054; margin: 0; }
+.raw-context {
+  border-top: 1px solid rgba(31, 42, 48, .1);
+  padding-top: 14px;
+}
+.raw-context h3 { margin: 0 0 12px; }
+
+.color-context-panel .panel-head { align-items: flex-start; }
+.color-context-panel .panel-head p { margin-top: 4px; }
+.color-context-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.color-context-summary span {
+  background: #f7f4ed;
+  border: 1px solid #e0d8ca;
+  border-radius: 999px;
+  color: #344054;
+  font-size: 12px;
+  padding: 6px 9px;
+}
+.color-card-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+.color-card {
+  background: #fff;
+  border: 1px solid rgba(31, 42, 48, .12);
+  border-radius: 8px;
+  padding: 14px;
+}
+.color-card-head {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto 1fr auto;
+  margin-bottom: 12px;
+}
+.color-card-head strong { display: block; font-size: 15px; }
+.color-swatch {
+  align-items: center;
+  background: linear-gradient(135deg, #e2e8f0, #f8fafc);
+  border: 1px solid #d5d0c3;
+  border-radius: 8px;
+  color: #667085;
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
+}
+.color-fields {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.color-fields label span {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+}
+
 .ai-workbench .panel-head { align-items: flex-start; }
 .ai-workbench .panel-head p { margin: 4px 0 0; }
 .ai-task-board {
@@ -390,6 +528,9 @@ dd { margin: 4px 0 0; }
   .toolbar button, .toolbar .button { flex: 1 1 100%; justify-content: center; min-width: 0; white-space: normal; }
   .form-grid, .rule-meta { grid-template-columns: 1fr; }
   .span-2 { grid-column: auto; }
+  .context-head, .color-context-panel .panel-head { align-items: stretch; flex-direction: column; }
+  .context-score { align-items: center; display: flex; flex: none; justify-content: space-between; width: 100%; }
+  .context-map, .context-brief, .color-fields { grid-template-columns: 1fr; }
   .ai-workbench .panel-head, .output-head { align-items: stretch; flex-direction: column; }
   .ai-task-board { grid-template-columns: 1fr; }
   .task-command { grid-column: auto; }

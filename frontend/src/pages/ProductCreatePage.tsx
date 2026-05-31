@@ -30,13 +30,13 @@ export function ProductCreatePage() {
       <div className="page-head">
         <div>
           <h1>新建商品</h1>
-          <p>一次录入商品基础资料和多个 SKC。</p>
+          <p>先建立模型上下文和颜色素材，再进入 AI 文案生成。</p>
         </div>
         <button className="primary" onClick={async () => {
           const created = await api.createProduct(product);
           setMessage('商品已创建');
           window.location.hash = `#/products/${created.id}`;
-        }}><Save size={16} />保存</button>
+        }}><Save size={16} />保存上下文</button>
       </div>
       {message && <p className="notice">{message}</p>}
       <section className="panel">

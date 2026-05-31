@@ -52,8 +52,8 @@ export function ProductDetailPage({ id }: { id: number }) {
               else await api.createSku(id, sku);
             }
             await load();
-            setMessage('商品资料已保存');
-          }}><Save size={16} />保存资料</button>
+            setMessage('模型上下文已保存');
+          }}><Save size={16} />保存上下文</button>
         </div>
       </div>
       {message && <p className="notice">{message}</p>}
