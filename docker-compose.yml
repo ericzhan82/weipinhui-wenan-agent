@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: vipshop-copy-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-vipshop_copy}
+      POSTGRES_USER: ${POSTGRES_USER:-vipshop}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vipshop_password}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vipshop} -d ${POSTGRES_DB:-vipshop_copy}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+    container_name: vipshop-copy-backend
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vipshop}:${POSTGRES_PASSWORD:-vipshop_password}@postgres:5432/${POSTGRES_DB:-vipshop_copy}
+      STORAGE_DIR: /app/storage
+      APP_ENV: ${APP_ENV:-production}
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-mock}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-60}
+      LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-2}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.4}
+    volumes:
+      - ./storage:/app/storage
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3).read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: vipshop-copy-frontend
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
