@@ -69,7 +69,7 @@ def test_generation_accepts_chinese_llm_field_names(monkeypatch):
             }
 
     monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
-    monkeypatch.setattr("app.services.copy_generator.get_llm_client", lambda: ChineseKeyClient())
+    monkeypatch.setattr("app.services.copy_generator.get_llm_client", lambda db=None: ChineseKeyClient())
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
@@ -99,7 +99,7 @@ def test_generation_repairs_invalid_llm_output_without_extra_model_call(monkeypa
     client = InvalidClient()
     monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
     monkeypatch.setenv("LLM_MAX_RETRIES", "2")
-    monkeypatch.setattr("app.services.copy_generator.get_llm_client", lambda: client)
+    monkeypatch.setattr("app.services.copy_generator.get_llm_client", lambda db=None: client)
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)

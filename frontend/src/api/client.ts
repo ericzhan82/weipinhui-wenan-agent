@@ -2,6 +2,8 @@ import type {
   CopyOutput,
   CopyVersion,
   LearningReport,
+  LlmConfig,
+  LlmConfigPayload,
   Product,
   ProductSku,
   Rule,
@@ -93,6 +95,12 @@ export const api = {
   rejectSuggestion: (id: number, reviewer: string) =>
     request<RuleSuggestion>(`/learning/suggestions/${id}/reject`, { method: 'POST', body: JSON.stringify({ reviewer }) }),
   llmStatus: () => request<Record<string, unknown>>('/llm/status'),
+  llmConfigs: () => request<LlmConfig[]>('/llm/configs'),
+  createLlmConfig: (payload: LlmConfigPayload) =>
+    request<LlmConfig>('/llm/configs', { method: 'POST', body: JSON.stringify(payload) }),
+  updateLlmConfig: (id: number, payload: Partial<LlmConfigPayload>) =>
+    request<LlmConfig>(`/llm/configs/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  activateLlmConfig: (id: number) => request<LlmConfig>(`/llm/configs/${id}/activate`, { method: 'POST' }),
   importExcel: (file: File) => {
     const data = new FormData();
     data.append('file', file);

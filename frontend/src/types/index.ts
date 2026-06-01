@@ -87,3 +87,32 @@ export type LearningReport = {
   suggestions_json: string[];
   created_at: string;
 };
+
+export type LlmConfig = {
+  id: number;
+  provider: string;
+  display_name?: string | null;
+  base_url?: string | null;
+  model: string;
+  temperature: number;
+  timeout_seconds: number;
+  max_retries: number;
+  enabled: boolean;
+  updated_by?: string | null;
+  api_key_set: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LlmConfigPayload = {
+  provider: string;
+  display_name?: string | null;
+  base_url?: string | null;
+  api_key?: string | null;
+  model: string;
+  temperature: number;
+  timeout_seconds: number;
+  max_retries: number;
+  enabled: boolean;
+  updated_by?: string | null;
+};

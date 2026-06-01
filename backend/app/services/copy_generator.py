@@ -98,9 +98,14 @@ def _validate_generated_payload(payload: dict, rules: list[Rule], product: Produ
 
 
 def _max_attempts() -> int:
+    return _max_attempts_for_client(None)
+
+
+def _max_attempts_for_client(client) -> int:
+    retries_value = getattr(client, "max_retries", None)
     try:
-        retries = int(os.getenv("LLM_MAX_RETRIES", "0"))
-    except ValueError:
+        retries = int(retries_value if retries_value is not None else os.getenv("LLM_MAX_RETRIES", "0"))
+    except (TypeError, ValueError):
         retries = 0
     return max(1, retries + 1)
 
@@ -214,9 +219,10 @@ def _upsert_copy_output(
     operator_name: str,
     version_type: str,
     change_reason: str,
+    client=None,
 ) -> CopyOutput:
     output = db.query(CopyOutput).filter(CopyOutput.product_id == product.id).first()
-    client = get_llm_client()
+    client = client or get_llm_client(db)
     if not output:
         output = CopyOutput(product_id=product.id, created_by=operator_name)
         db.add(output)
@@ -251,7 +257,7 @@ def generate_copy_for_product(db: Session, product_id: int, operator_name: str =
         raise ValueError("商品不存在")
     rules = _rules(db)
     product_payload = product_to_dict(product)
-    client = get_llm_client()
+    client = get_llm_client(db)
     messages = build_generation_messages(product_payload, [rule.content for rule in rules], _history(db, product))
     payload = _normalize_llm_payload(client.generate_json(messages, schema_hint={"product": product_payload}))
     validation = _validate_generated_payload(payload, rules, product)
@@ -264,8 +270,8 @@ def generate_copy_for_product(db: Session, product_id: int, operator_name: str =
     attempt = 1
     while (
         not validation["passed"]
-        and os.getenv("LLM_PROVIDER", "mock") != "mock"
-        and attempt < _max_attempts()
+        and client.provider != "mock"
+        and attempt < _max_attempts_for_client(client)
     ):
         repair_messages = _repair_messages(messages, payload, validation)
         payload = _normalize_llm_payload(
@@ -277,14 +283,14 @@ def generate_copy_for_product(db: Session, product_id: int, operator_name: str =
         validation = _validate_generated_payload(payload, rules, product)
         attempt += 1
     if not validation["passed"]:
-        if os.getenv("LLM_PROVIDER", "mock") == "mock":
+        if client.provider == "mock":
             from app.services.llm.mock_client import MockClient
 
             payload = _normalize_llm_payload(MockClient().generate_json(messages, schema_hint={"product": product_payload}))
             validation = _validate_generated_payload(payload, rules, product)
         if not validation["passed"]:
             raise ValueError({"message": "文案生成后校验未通过", "validation": validation})
-    output = _upsert_copy_output(db, product, payload, operator_name, "model_generated", "模型生成")
+    output = _upsert_copy_output(db, product, payload, operator_name, "model_generated", "模型生成", client)
     db.add(
         ValidationResult(
             product_id=product.id,
@@ -320,7 +326,7 @@ def rewrite_copy_for_product(db: Session, product_id: int, instruction: str, ope
         "main_image_tags": current.main_image_tags,
         "color_copy": current.color_copy,
     }
-    client = get_llm_client()
+    client = get_llm_client(db)
     messages = build_rewrite_messages(product_to_dict(product), current_payload, instruction, [rule.content for rule in rules])
     payload = _normalize_llm_payload(client.generate_json(messages, schema_hint={"product": product_to_dict(product), "current": current_payload}))
     if instruction and "防晒" in instruction:
@@ -334,7 +340,7 @@ def rewrite_copy_for_product(db: Session, product_id: int, instruction: str, ope
     )
     if not validation["passed"]:
         raise ValueError({"message": "重写文案校验未通过", "validation": validation})
-    output = _upsert_copy_output(db, product, payload, operator_name, "rewrite", instruction)
+    output = _upsert_copy_output(db, product, payload, operator_name, "rewrite", instruction, client)
     db.commit()
     db.refresh(output)
     return {

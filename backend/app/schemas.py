@@ -157,3 +157,50 @@ class ExportResult(BaseModel):
     export_id: str
     filename: str
     download_url: str
+
+
+class LlmConfigBase(BaseModel):
+    provider: str
+    display_name: str | None = None
+    base_url: str | None = None
+    model: str
+    temperature: float = 0.4
+    timeout_seconds: int = 90
+    max_retries: int = 0
+    enabled: bool = True
+    updated_by: str | None = "operator"
+
+
+class LlmConfigCreate(LlmConfigBase):
+    api_key: str | None = None
+
+
+class LlmConfigUpdate(BaseModel):
+    provider: str | None = None
+    display_name: str | None = None
+    base_url: str | None = None
+    api_key: str | None = None
+    model: str | None = None
+    temperature: float | None = None
+    timeout_seconds: int | None = None
+    max_retries: int | None = None
+    enabled: bool | None = None
+    updated_by: str | None = None
+
+
+class LlmConfigRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    provider: str
+    display_name: str | None
+    base_url: str | None
+    model: str
+    temperature: float
+    timeout_seconds: int
+    max_retries: int
+    enabled: bool
+    updated_by: str | None
+    api_key_set: bool
+    created_at: datetime
+    updated_at: datetime

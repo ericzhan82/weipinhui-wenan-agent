@@ -10,12 +10,23 @@ from .base import LlmClient
 class OpenAICompatibleClient(LlmClient):
     provider = "openai_compatible"
 
-    def __init__(self) -> None:
-        self.api_key = os.getenv("LLM_API_KEY", "")
-        self.base_url = os.getenv("LLM_BASE_URL", "").rstrip("/")
-        self.model = os.getenv("LLM_MODEL", "mock")
-        self.timeout = int(os.getenv("LLM_TIMEOUT_SECONDS", "90"))
-        self.temperature = float(os.getenv("LLM_TEMPERATURE", "0.4"))
+    def __init__(
+        self,
+        provider: str = "openai_compatible",
+        api_key: str | None = None,
+        base_url: str | None = None,
+        model: str | None = None,
+        timeout_seconds: int | None = None,
+        temperature: float | None = None,
+        max_retries: int | None = None,
+    ) -> None:
+        self.provider = provider
+        self.api_key = api_key if api_key is not None else os.getenv("LLM_API_KEY", "")
+        self.base_url = (base_url if base_url is not None else os.getenv("LLM_BASE_URL", "")).rstrip("/")
+        self.model = model if model is not None else os.getenv("LLM_MODEL", "mock")
+        self.timeout = timeout_seconds if timeout_seconds is not None else int(os.getenv("LLM_TIMEOUT_SECONDS", "90"))
+        self.temperature = temperature if temperature is not None else float(os.getenv("LLM_TEMPERATURE", "0.4"))
+        self.max_retries = max_retries if max_retries is not None else int(os.getenv("LLM_MAX_RETRIES", "0"))
 
     def generate_json(self, messages: list[dict], schema_hint: dict | None = None) -> dict:
         if not self.api_key or not self.base_url or not self.model:

@@ -175,6 +175,24 @@ class LearningReport(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
 
+class LlmConfig(Base):
+    __tablename__ = "llm_configs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    provider: Mapped[str] = mapped_column(String(80), index=True)
+    display_name: Mapped[str | None] = mapped_column(String(120))
+    base_url: Mapped[str | None] = mapped_column(Text)
+    api_key: Mapped[str | None] = mapped_column(Text)
+    model: Mapped[str] = mapped_column(String(160))
+    temperature: Mapped[float] = mapped_column(Float, default=0.4)
+    timeout_seconds: Mapped[int] = mapped_column(Integer, default=90)
+    max_retries: Mapped[int] = mapped_column(Integer, default=0)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    updated_by: Mapped[str | None] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
 class PerformanceMetric(Base):
     __tablename__ = "performance_metrics"
 
