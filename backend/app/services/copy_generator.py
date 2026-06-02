@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models import CopyOutput, HistoryCase, Product, Rule, ValidationResult
 from app.services.copy_validator import validate_copy_payload
+from app.services.hot_search_service import evaluate_hot_title, get_hot_search_config, select_hot_terms_for_product
 from app.services.llm import get_llm_client
 from app.services.prompt_builder import build_generation_messages, build_rewrite_messages
 from app.services.version_service import create_copy_version
@@ -212,6 +213,59 @@ def _history(db: Session, product: Product) -> list[dict]:
     ]
 
 
+def _base_hot_search_context(enabled: bool = False) -> dict:
+    return {
+        "enabled": enabled,
+        "selected_hot_terms": [],
+        "matched_hot_terms": [],
+        "missing_hot_terms": [],
+        "excluded_hot_terms": [],
+        "hot_search_source_batch": None,
+    }
+
+
+def _resolve_hot_search_context(db: Session, product: Product, use_hot_search: bool | None) -> dict:
+    enabled = bool(get_hot_search_config(db)["enabled_by_default"]) if use_hot_search is None else use_hot_search
+    if not enabled:
+        return _base_hot_search_context(False)
+    selected = select_hot_terms_for_product(db, product)
+    context = {
+        **_base_hot_search_context(True),
+        **selected,
+    }
+    if not context["selected_hot_terms"]:
+        raise ValueError(
+            {
+                "message": "未找到可用热搜词",
+                "validation": {
+                    "passed": False,
+                    "errors": [
+                        {
+                            "field": "hot_search",
+                            "message": "当前商品类目没有可用热搜词，或热搜词已被规避词/性别规则过滤",
+                            "value": product.category_3,
+                        }
+                    ],
+                    "warnings": [],
+                },
+            }
+        )
+    return context
+
+
+def _merge_hot_search_validation(payload: dict, validation: dict, hot_search_context: dict) -> dict:
+    if not hot_search_context.get("enabled"):
+        return {**hot_search_context, "matched_hot_terms": [], "missing_hot_terms": []}
+    coverage = evaluate_hot_title(payload.get("title"), hot_search_context.get("selected_hot_terms"))
+    hot_search_context = {**hot_search_context, **coverage}
+    for term in coverage["missing_hot_terms"]:
+        validation["errors"].append(
+            {"field": "title", "message": f"标题未完整包含热搜词：{term}", "value": term}
+        )
+    validation["passed"] = not validation["errors"]
+    return hot_search_context
+
+
 def _upsert_copy_output(
     db: Session,
     product: Product,
@@ -251,22 +305,45 @@ def _upsert_copy_output(
     return output
 
 
-def generate_copy_for_product(db: Session, product_id: int, operator_name: str = "system") -> dict:
+def generate_copy_for_product(
+    db: Session,
+    product_id: int,
+    operator_name: str = "system",
+    use_hot_search: bool | None = None,
+) -> dict:
     product = db.get(Product, product_id)
     if not product:
         raise ValueError("商品不存在")
     rules = _rules(db)
     product_payload = product_to_dict(product)
     client = get_llm_client(db)
-    messages = build_generation_messages(product_payload, [rule.content for rule in rules], _history(db, product))
-    payload = _normalize_llm_payload(client.generate_json(messages, schema_hint={"product": product_payload}))
+    hot_search_context = _resolve_hot_search_context(db, product, use_hot_search)
+    messages = build_generation_messages(
+        product_payload,
+        [rule.content for rule in rules],
+        _history(db, product),
+        hot_search_context,
+    )
+    payload = _normalize_llm_payload(
+        client.generate_json(
+            messages,
+            schema_hint={"product": product_payload, "hot_search": hot_search_context},
+        )
+    )
     validation = _validate_generated_payload(payload, rules, product)
+    hot_search_context = _merge_hot_search_validation(payload, validation, hot_search_context)
     if not validation["passed"]:
         repaired_payload = _locally_repair_payload(payload, product_payload)
         repaired_validation = _validate_generated_payload(repaired_payload, rules, product)
+        repaired_hot_search_context = _merge_hot_search_validation(
+            repaired_payload,
+            repaired_validation,
+            hot_search_context,
+        )
         if repaired_validation["passed"]:
             payload = repaired_payload
             validation = repaired_validation
+            hot_search_context = repaired_hot_search_context
     attempt = 1
     while (
         not validation["passed"]
@@ -277,10 +354,16 @@ def generate_copy_for_product(db: Session, product_id: int, operator_name: str =
         payload = _normalize_llm_payload(
             client.generate_json(
                 repair_messages,
-                schema_hint={"product": product_payload, "previous": payload, "validation": validation},
+                schema_hint={
+                    "product": product_payload,
+                    "previous": payload,
+                    "validation": validation,
+                    "hot_search": hot_search_context,
+                },
             )
         )
         validation = _validate_generated_payload(payload, rules, product)
+        hot_search_context = _merge_hot_search_validation(payload, validation, hot_search_context)
         attempt += 1
     if not validation["passed"]:
         if client.provider == "mock":
@@ -288,6 +371,7 @@ def generate_copy_for_product(db: Session, product_id: int, operator_name: str =
 
             payload = _normalize_llm_payload(MockClient().generate_json(messages, schema_hint={"product": product_payload}))
             validation = _validate_generated_payload(payload, rules, product)
+            hot_search_context = _merge_hot_search_validation(payload, validation, hot_search_context)
         if not validation["passed"]:
             raise ValueError({"message": "文案生成后校验未通过", "validation": validation})
     output = _upsert_copy_output(db, product, payload, operator_name, "model_generated", "模型生成", client)
@@ -310,6 +394,12 @@ def generate_copy_for_product(db: Session, product_id: int, operator_name: str =
         "color_copy": output.color_copy,
         "source_basis": output.source_basis,
         "warnings": validation["warnings"] + payload.get("warnings", []),
+        "hot_search_enabled": hot_search_context["enabled"],
+        "selected_hot_terms": hot_search_context["selected_hot_terms"],
+        "matched_hot_terms": hot_search_context["matched_hot_terms"],
+        "missing_hot_terms": hot_search_context["missing_hot_terms"],
+        "excluded_hot_terms": hot_search_context["excluded_hot_terms"],
+        "hot_search_source_batch": hot_search_context["hot_search_source_batch"],
     }
 
 

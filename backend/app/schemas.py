@@ -110,6 +110,15 @@ class ValidateCopyRequest(BaseModel):
     operator_name: str = "operator"
 
 
+class CopyGenerateRequest(BaseModel):
+    use_hot_search: bool | None = None
+
+
+class HotSearchConfigUpdate(BaseModel):
+    enabled_by_default: bool
+    updated_by: str = "operator"
+
+
 class HistoryCaseCreate(BaseModel):
     reason: str = "人工确认优秀案例"
     operator_name: str = "operator"

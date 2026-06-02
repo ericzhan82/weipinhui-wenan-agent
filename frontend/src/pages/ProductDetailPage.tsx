@@ -5,17 +5,22 @@ import { CopyEditor } from '../components/CopyEditor';
 import { ProductForm } from '../components/ProductForm';
 import { SkuEditor } from '../components/SkuEditor';
 import { VersionPanel } from '../components/VersionPanel';
-import type { CopyOutput, CopyVersion, Product, ValidationResult } from '../types';
+import type { CopyOutput, CopyVersion, HotSearchConfig, Product, ValidationResult } from '../types';
 
 export function ProductDetailPage({ id }: { id: number }) {
   const [product, setProduct] = useState<Product | null>(null);
   const [loadedSkuIds, setLoadedSkuIds] = useState<number[]>([]);
   const [versions, setVersions] = useState<CopyVersion[]>([]);
+  const [hotSearchConfig, setHotSearchConfig] = useState<HotSearchConfig | null>(null);
   const [message, setMessage] = useState('');
 
   const load = async () => {
-    const next = await api.product(id);
+    const [next, config] = await Promise.all([
+      api.product(id),
+      api.hotSearchConfig().catch(() => null),
+    ]);
     setProduct(next);
+    setHotSearchConfig(config);
     setLoadedSkuIds(next.skus.map((sku) => sku.id).filter((skuId): skuId is number => Boolean(skuId)));
     setVersions(await api.versions(id));
   };
@@ -24,8 +29,14 @@ export function ProductDetailPage({ id }: { id: number }) {
   if (!product) return <main className="page"><p>加载中...</p></main>;
 
   const refreshCopy = async (next?: CopyOutput | void) => {
-    if (next) setProduct({ ...product, copy_output: next });
-    await load();
+    if (!next) {
+      await load();
+      return;
+    }
+    const refreshed = await api.product(id);
+    setProduct({ ...refreshed, copy_output: { ...(refreshed.copy_output || {}), ...next } });
+    setLoadedSkuIds(refreshed.skus.map((sku) => sku.id).filter((skuId): skuId is number => Boolean(skuId)));
+    setVersions(await api.versions(id));
   };
 
   return (
@@ -64,7 +75,8 @@ export function ProductDetailPage({ id }: { id: number }) {
       <SkuEditor skus={product.skus} onChange={(skus) => setProduct({ ...product, skus })} />
       <CopyEditor
         copy={product.copy_output}
-        onGenerate={async () => refreshCopy(await api.generateCopy(id))}
+        hotSearchConfig={hotSearchConfig}
+        onGenerate={async (useHotSearch) => refreshCopy(await api.generateCopy(id, useHotSearch))}
         onRewrite={async (instruction) => refreshCopy(await api.rewriteCopy(id, instruction, product.updated_by || '运营'))}
         onSave={async (payload) => {
           await refreshCopy(await api.saveCopy(id, payload));

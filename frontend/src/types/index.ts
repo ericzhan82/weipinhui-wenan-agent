@@ -18,6 +18,12 @@ export type CopyOutput = {
   llm_provider?: string;
   llm_model?: string;
   status?: string;
+  hot_search_enabled?: boolean;
+  selected_hot_terms?: string[];
+  matched_hot_terms?: string[];
+  missing_hot_terms?: string[];
+  excluded_hot_terms?: Array<{ keyword: string; reason: string }>;
+  hot_search_source_batch?: number | null;
 };
 
 export type Product = {
@@ -114,5 +120,10 @@ export type LlmConfigPayload = {
   timeout_seconds: number;
   max_retries: number;
   enabled: boolean;
+  updated_by?: string | null;
+};
+
+export type HotSearchConfig = {
+  enabled_by_default: boolean;
   updated_by?: string | null;
 };

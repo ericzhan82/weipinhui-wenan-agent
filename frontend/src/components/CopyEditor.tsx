@@ -17,12 +17,13 @@ import {
   Wand2,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import type { CopyOutput, ValidationResult } from '../types';
+import type { CopyOutput, HotSearchConfig, ValidationResult } from '../types';
 import { ValidationPanel } from './ValidationPanel';
 
 const generationSteps = [
   { label: '商品资料', detail: '读取品类、FBA、场景与 SKC 色系', icon: Database },
   { label: '规则与案例', detail: '装载禁用词、字数规则和历史优秀案例', icon: ListChecks },
+  { label: '热搜词筛选', detail: '按开关决定是否按类目、规避词和性别筛词', icon: Target },
   { label: '模型生成', detail: '调用配置模型生成标题、卖点和颜色词', icon: BrainCircuit },
   { label: 'JSON 解析', detail: '识别中英文字段并归一化输出结构', icon: FileJson },
   { label: '校验修正', detail: '校验字数、空值和禁用词，必要时本地补全', icon: ShieldCheck },
@@ -37,16 +38,18 @@ const rewritePresets = [
 
 type BusyAction = '' | 'generate' | 'rewrite' | 'validate' | 'save';
 type ProcessStatus = 'idle' | 'running' | 'done' | 'error';
+type HotSearchMode = 'global' | 'on' | 'off';
 
 type Props = {
   copy?: CopyOutput | null;
-  onGenerate: () => Promise<CopyOutput | void>;
+  hotSearchConfig?: HotSearchConfig | null;
+  onGenerate: (useHotSearch?: boolean) => Promise<CopyOutput | void>;
   onRewrite: (instruction: string) => Promise<CopyOutput | void>;
   onSave: (payload: { title: string; main_image_tags: string[]; color_copy: string; operator_name: string; change_reason: string }) => Promise<void>;
   onValidate: (payload: Partial<CopyOutput> & { operator_name: string }) => Promise<ValidationResult>;
 };
 
-export function CopyEditor({ copy, onGenerate, onRewrite, onSave, onValidate }: Props) {
+export function CopyEditor({ copy, hotSearchConfig, onGenerate, onRewrite, onSave, onValidate }: Props) {
   const [title, setTitle] = useState('');
   const [tags, setTags] = useState(['', '', '']);
   const [colorCopy, setColorCopy] = useState('');
@@ -61,6 +64,7 @@ export function CopyEditor({ copy, onGenerate, onRewrite, onSave, onValidate }: 
   const [processStartedAt, setProcessStartedAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [lastDuration, setLastDuration] = useState<number | null>(null);
+  const [hotSearchMode, setHotSearchMode] = useState<HotSearchMode>('global');
 
   useEffect(() => {
     setTitle(copy?.title || '');
@@ -91,6 +95,20 @@ export function CopyEditor({ copy, onGenerate, onRewrite, onSave, onValidate }: 
     color_copy: colorCopy,
     operator_name: operatorName,
   };
+  const hotSearchOverride = hotSearchMode === 'global' ? undefined : hotSearchMode === 'on';
+  const hotSearchEnabled = hotSearchMode === 'global'
+    ? Boolean(hotSearchConfig?.enabled_by_default)
+    : hotSearchMode === 'on';
+  const selectedHotTerms = copy?.selected_hot_terms || [];
+  const matchedHotTerms = copy?.matched_hot_terms || [];
+  const missingHotTerms = copy?.missing_hot_terms || [];
+  const excludedHotTerms = copy?.excluded_hot_terms || [];
+  const hasHotSearchResult = copy?.hot_search_enabled !== undefined;
+  const hotSearchModeText = hotSearchMode === 'global'
+    ? `按全局默认：${hotSearchConfig?.enabled_by_default ? '开启' : '关闭'}`
+    : hotSearchMode === 'on'
+      ? '本次手动开启'
+      : '本次手动关闭';
 
   const processProgress = processStatus === 'done'
     ? 100
@@ -138,7 +156,7 @@ export function CopyEditor({ copy, onGenerate, onRewrite, onSave, onValidate }: 
           <p className="muted">把商品资料交给模型生成首版文案，再由运营按意图接管和定稿。</p>
         </div>
         <div className="toolbar">
-          <button className="primary" title="生成文案" disabled={Boolean(busyAction)} onClick={() => runAction('generate', async () => { await onGenerate(); })}>
+          <button className="primary" title="生成文案" disabled={Boolean(busyAction)} onClick={() => runAction('generate', async () => { await onGenerate(hotSearchOverride); })}>
             <Sparkles size={16} />{busyAction === 'generate' ? '生成中' : '启动生成'}
           </button>
           <button title="重写文案" disabled={Boolean(busyAction)} onClick={() => runAction('rewrite', async () => { await onRewrite(instruction); })}>
@@ -153,6 +171,47 @@ export function CopyEditor({ copy, onGenerate, onRewrite, onSave, onValidate }: 
         </div>
       </div>
       {error && <p className="notice error">{error}</p>}
+      <div className={`hot-search-control ${hotSearchEnabled ? 'enabled' : ''}`}>
+        <div className="hot-search-switch">
+          <button
+            type="button"
+            className={`switch-button ${hotSearchEnabled ? 'on' : ''}`}
+            title="切换热搜词增强"
+            onClick={() => setHotSearchMode(hotSearchEnabled ? 'off' : 'on')}
+          >
+            <span />
+          </button>
+          <div>
+            <strong>热搜词增强</strong>
+            <p>
+              {hotSearchEnabled
+                ? '生成标题时会优先使用热搜词，并用完整词连续命中校验。'
+                : '本次生成保持原有完整文案逻辑，不附加热搜词要求。'}
+            </p>
+          </div>
+        </div>
+        <div className="hot-search-mode" role="group" aria-label="热搜词增强模式">
+          {[
+            ['global', '按全局'],
+            ['on', '本次开启'],
+            ['off', '本次关闭'],
+          ].map(([mode, label]) => (
+            <button
+              type="button"
+              key={mode}
+              className={hotSearchMode === mode ? 'active' : ''}
+              onClick={() => setHotSearchMode(mode as HotSearchMode)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="hot-search-summary">
+          <span>{hotSearchModeText}</span>
+          <span>批次：{copy?.hot_search_source_batch ? `#${copy.hot_search_source_batch}` : '生成后显示'}</span>
+          <span>可用词：{hasHotSearchResult ? selectedHotTerms.length : '生成后显示'}</span>
+        </div>
+      </div>
       <div className="ai-task-board">
         <div className="task-card task-objective">
           <span className="task-eyebrow"><Target size={14} />模型任务</span>
@@ -229,6 +288,55 @@ export function CopyEditor({ copy, onGenerate, onRewrite, onSave, onValidate }: 
           <span><b>输入</b>{payload.main_image_tags.length ? `${payload.main_image_tags.length} 个卖点草稿` : '商品资料 + 规则库'}</span>
           <span><b>输出</b>{title ? `${title.length} 字标题 / ${payload.main_image_tags.length} 个主图卖点` : '等待生成'}</span>
           <span><b>依据</b>{copy?.source_basis || '生成后展示模型依据'}</span>
+        </div>
+      </div>
+      <div className={`hot-search-coverage ${hasHotSearchResult ? 'ready' : ''}`}>
+        <div className="coverage-head">
+          <div>
+            <h3>热搜词覆盖</h3>
+            <p>
+              {hasHotSearchResult
+                ? copy?.hot_search_enabled
+                  ? '已按完整词连续命中校验生成结果。'
+                  : '本次生成未启用热搜词增强。'
+                : '生成后展示候选热搜词、命中词、缺失词和过滤原因。'}
+            </p>
+          </div>
+          <span className={copy?.hot_search_enabled ? 'coverage-badge on' : 'coverage-badge'}>
+            {copy?.hot_search_enabled ? '已启用' : '未启用'}
+          </span>
+        </div>
+        <div className="coverage-grid">
+          <div>
+            <strong>可用热搜词</strong>
+            <div className="term-chips">
+              {selectedHotTerms.length ? selectedHotTerms.map((term) => <span className="term-chip ready" key={term}>{term}</span>) : <span className="term-chip empty">暂无结果</span>}
+            </div>
+          </div>
+          <div>
+            <strong>已命中</strong>
+            <div className="term-chips">
+              {matchedHotTerms.length ? matchedHotTerms.map((term) => <span className="term-chip hit" key={term}>{term}</span>) : <span className="term-chip empty">暂无命中</span>}
+            </div>
+          </div>
+          <div>
+            <strong>未命中</strong>
+            <div className="term-chips">
+              {missingHotTerms.length ? missingHotTerms.map((term) => <span className="term-chip miss" key={term}>{term}</span>) : <span className="term-chip empty">暂无缺失</span>}
+            </div>
+          </div>
+          <div>
+            <strong>已过滤</strong>
+            <div className="term-chips">
+              {excludedHotTerms.length
+                ? excludedHotTerms.map((item) => (
+                  <span className="term-chip filtered" title={item.reason} key={`${item.keyword}-${item.reason}`}>
+                    {item.keyword}
+                  </span>
+                ))
+                : <span className="term-chip empty">暂无过滤</span>}
+            </div>
+          </div>
         </div>
       </div>
       <div className="output-head">

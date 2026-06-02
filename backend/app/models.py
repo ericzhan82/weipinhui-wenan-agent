@@ -193,6 +193,48 @@ class LlmConfig(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
 
 
+class HotSearchConfig(Base):
+    __tablename__ = "hot_search_configs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    enabled_by_default: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    updated_by: Mapped[str | None] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class HotSearchBatch(Base):
+    __tablename__ = "hot_search_batches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    filename: Mapped[str | None] = mapped_column(String(240))
+    uploaded_by: Mapped[str | None] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)
+
+    terms: Mapped[list["HotSearchTerm"]] = relationship(
+        back_populates="batch", cascade="all, delete-orphan"
+    )
+
+
+class HotSearchTerm(Base):
+    __tablename__ = "hot_search_terms"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    batch_id: Mapped[int] = mapped_column(ForeignKey("hot_search_batches.id"), index=True)
+    category: Mapped[str] = mapped_column(String(160), index=True)
+    keyword: Mapped[str] = mapped_column(String(240), index=True)
+    rank: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    search_uv_index: Mapped[float | None] = mapped_column(Float, nullable=True)
+    search_uv_growth: Mapped[float | None] = mapped_column(Float, nullable=True)
+    click_rate_index: Mapped[float | None] = mapped_column(Float, nullable=True)
+    opportunity_index: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gmv_index: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sales_index: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+    batch: Mapped[HotSearchBatch] = relationship(back_populates="terms")
+
+
 class PerformanceMetric(Base):
     __tablename__ = "performance_metrics"
 

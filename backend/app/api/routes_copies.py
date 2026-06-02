@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import CopyOutput, CopyVersion
-from app.schemas import CopyRead, CopySaveRequest, RewriteCopyRequest, ValidateCopyRequest
+from app.schemas import CopyGenerateRequest, CopyRead, CopySaveRequest, RewriteCopyRequest, ValidateCopyRequest
 from app.services.copy_generator import (
     generate_copy_for_product,
     rewrite_copy_for_product,
@@ -16,9 +16,9 @@ router = APIRouter(prefix="/api/products", tags=["copies"])
 
 
 @router.post("/{product_id}/generate-copy")
-def generate_copy(product_id: int, db: Session = Depends(get_db)):
+def generate_copy(product_id: int, payload: CopyGenerateRequest | None = None, db: Session = Depends(get_db)):
     try:
-        return generate_copy_for_product(db, product_id)
+        return generate_copy_for_product(db, product_id, use_hot_search=payload.use_hot_search if payload else None)
     except ValueError as exc:
         raise HTTPException(400, detail=exc.args[0]) from exc
     except RuntimeError as exc:

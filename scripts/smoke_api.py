@@ -1,8 +1,44 @@
+from io import BytesIO
 import json
 import sys
 import time
 
+from openpyxl import Workbook
 import requests
+
+
+def hot_search_workbook() -> bytes:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["排名", "搜索词主分类", "关键词", "搜索UV指数", "机会指数", "成交金额指数", "销售量指数"])
+    sheet.append([1, "外套", "女童防晒衣", 1000, 5, 30000, 600])
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
+def ensure_mock_llm(base: str) -> dict:
+    configs_response = requests.get(base + "/llm/configs", timeout=10)
+    configs_response.raise_for_status()
+    configs = configs_response.json()
+    for config in configs:
+        if config.get("provider") == "mock":
+            activated_response = requests.post(f"{base}/llm/configs/{config['id']}/activate", timeout=10)
+            activated_response.raise_for_status()
+            return activated_response.json()
+    created_response = requests.post(
+        base + "/llm/configs",
+        json={
+            "provider": "mock",
+            "display_name": "Smoke Mock",
+            "model": "mock",
+            "enabled": True,
+            "updated_by": "smoke",
+        },
+        timeout=10,
+    )
+    created_response.raise_for_status()
+    return created_response.json()
 
 
 def main() -> int:
@@ -15,7 +51,40 @@ def main() -> int:
             time.sleep(1)
     out: dict[str, object] = {}
     out["health"] = requests.get(base + "/health", timeout=10).json()["status"]
+    out["activatedLlm"] = ensure_mock_llm(base)["provider"]
+    if out["activatedLlm"] != "mock":
+        raise AssertionError("mock llm activation failed")
     out["llm"] = requests.get(base + "/llm/status", timeout=10).json()["provider"]
+
+    config_response = requests.get(base + "/hot-search/config", timeout=10)
+    config_response.raise_for_status()
+    out["hotSearchDefaultBefore"] = config_response.json()["enabled_by_default"]
+    reset_config_response = requests.put(
+        base + "/hot-search/config",
+        json={"enabled_by_default": False, "updated_by": "smoke"},
+        timeout=10,
+    )
+    reset_config_response.raise_for_status()
+    out["hotSearchDefaultReset"] = reset_config_response.json()["enabled_by_default"]
+    if out["hotSearchDefaultReset"] is not False:
+        raise AssertionError("hot search default reset failed")
+
+    hot_import_response = requests.post(
+        base + "/hot-search/import",
+        files={
+            "file": (
+                "hot-search-smoke.xlsx",
+                hot_search_workbook(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        timeout=10,
+    )
+    hot_import_response.raise_for_status()
+    out["hotSearchImported"] = hot_import_response.json()["imported_count"]
+    if out["hotSearchImported"] < 1:
+        raise AssertionError("hot search import did not save any term")
+
     product = {
         "style_no": "A101",
         "product_no": "P101",
@@ -41,25 +110,42 @@ def main() -> int:
     copy_response.raise_for_status()
     copy = copy_response.json()
     out["generatedTitleLength"] = len(copy["title"])
+    out["normalHotSearchEnabled"] = copy.get("hot_search_enabled")
+    if out["normalHotSearchEnabled"] is not False:
+        raise AssertionError("normal generate should keep hot search disabled")
+
+    hot_copy_response = requests.post(
+        f"{base}/products/{created['id']}/generate-copy",
+        json={"use_hot_search": True},
+        timeout=10,
+    )
+    hot_copy_response.raise_for_status()
+    hot_copy = hot_copy_response.json()
+    out["hotSearchEnabled"] = hot_copy["hot_search_enabled"]
+    out["hotSearchMatched"] = hot_copy["matched_hot_terms"]
+    if out["hotSearchEnabled"] is not True or "女童防晒衣" not in out["hotSearchMatched"]:
+        raise AssertionError("hot search generate did not match uploaded term")
 
     validation_response = requests.post(
         f"{base}/products/{created['id']}/validate-copy",
         json={
-            "title": copy["title"],
-            "main_image_tags": copy["main_image_tags"],
-            "color_copy": copy["color_copy"],
+            "title": hot_copy["title"],
+            "main_image_tags": hot_copy["main_image_tags"],
+            "color_copy": hot_copy["color_copy"],
             "operator_name": "smoke",
         },
         timeout=10,
     )
     validation_response.raise_for_status()
     out["validationPassed"] = validation_response.json()["passed"]
+    if out["validationPassed"] is not True:
+        raise AssertionError("generated copy did not pass validation")
 
     save_response = requests.put(
         f"{base}/products/{created['id']}/copy",
         json={
-            "title": copy["title"],
-            "main_image_tags": copy["main_image_tags"],
+            "title": hot_copy["title"],
+            "main_image_tags": hot_copy["main_image_tags"],
             "color_copy": "夏日百搭",
             "operator_name": "smoke",
             "change_reason": "冒烟人工优化",

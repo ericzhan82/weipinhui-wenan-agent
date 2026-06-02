@@ -213,6 +213,8 @@ git push -u origin main
 - API Key 通过 `/settings` 写入数据库，接口只返回是否已设置；`.env` 仅作为无数据库配置时的兜底。
 - 不要把 `.env`、真实 Excel、数据库数据提交到 GitHub。
 - 云端部署时请修改 `POSTGRES_PASSWORD`。
+- 当前版本不内置登录账号体系；公网部署前请配置 HTTPS、访问控制或防火墙白名单。
+- 如果后端端口单独暴露，请将 `CORS_ORIGINS` 设置为明确域名。
 - 备份 `data/` 与 `storage/` 时注意权限和敏感数据。
 
 ## 常见问题

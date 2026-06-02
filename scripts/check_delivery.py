@@ -1,5 +1,6 @@
 from pathlib import Path
 import re
+import subprocess
 import sys
 
 
@@ -23,6 +24,7 @@ REQUIRED_FILES = [
     "scripts/verify_docker.ps1",
     "scripts/verify_docker.sh",
     "backend/Dockerfile",
+    "backend/.dockerignore",
     "backend/requirements.txt",
     "backend/main.py",
     "backend/app/db.py",
@@ -48,6 +50,7 @@ REQUIRED_FILES = [
     "backend/app/services/llm/openai_compatible_client.py",
     "backend/app/services/llm/factory.py",
     "frontend/Dockerfile",
+    "frontend/.dockerignore",
     "frontend/nginx.conf",
     "frontend/package.json",
     "frontend/src/App.tsx",
@@ -60,7 +63,41 @@ REQUIRED_FILES = [
 
 def is_ignored(path: Path) -> bool:
     relative = path.relative_to(ROOT)
-    return any(part in IGNORED_PARTS for part in relative.parts)
+    relative_text = relative.as_posix()
+    if any(part in IGNORED_PARTS for part in relative.parts):
+        return True
+    if relative_text not in TRACKED_FILES and is_git_ignored(relative_text):
+        return True
+    return False
+
+
+def is_git_ignored(relative_text: str) -> bool:
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "-q", "--", relative_text],
+            cwd=ROOT,
+            check=False,
+        )
+    except OSError:
+        return False
+    return result.returncode == 0
+
+
+def tracked_files() -> set[str]:
+    try:
+        result = subprocess.run(
+            ["git", "ls-files"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return set()
+    return {line.strip().replace("\\", "/") for line in result.stdout.splitlines() if line.strip()}
+
+
+TRACKED_FILES = tracked_files()
 
 
 def main() -> int:

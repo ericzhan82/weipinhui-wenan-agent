@@ -1,6 +1,7 @@
 import type {
   CopyOutput,
   CopyVersion,
+  HotSearchConfig,
   LearningReport,
   LlmConfig,
   LlmConfigPayload,
@@ -66,7 +67,11 @@ export const api = {
     request<ProductSku>(`/products/${productId}/skus`, { method: 'POST', body: JSON.stringify(payload) }),
   updateSku: (id: number, payload: ProductSku) => request<ProductSku>(`/skus/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   deleteSku: (id: number) => request<{ deleted: boolean }>(`/skus/${id}`, { method: 'DELETE' }),
-  generateCopy: (productId: number) => request<CopyOutput & { warnings: unknown[] }>(`/products/${productId}/generate-copy`, { method: 'POST' }),
+  generateCopy: (productId: number, use_hot_search?: boolean) =>
+    request<CopyOutput & { warnings: unknown[] }>(`/products/${productId}/generate-copy`, {
+      method: 'POST',
+      ...(use_hot_search === undefined ? {} : { body: JSON.stringify({ use_hot_search }) }),
+    }),
   rewriteCopy: (productId: number, rewrite_instruction: string, operator_name: string) =>
     request<CopyOutput>(`/products/${productId}/rewrite-copy`, {
       method: 'POST',
@@ -101,6 +106,14 @@ export const api = {
   updateLlmConfig: (id: number, payload: Partial<LlmConfigPayload>) =>
     request<LlmConfig>(`/llm/configs/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   activateLlmConfig: (id: number) => request<LlmConfig>(`/llm/configs/${id}/activate`, { method: 'POST' }),
+  hotSearchConfig: () => request<HotSearchConfig>('/hot-search/config'),
+  updateHotSearchConfig: (payload: HotSearchConfig & { updated_by?: string }) =>
+    request<HotSearchConfig>('/hot-search/config', { method: 'PUT', body: JSON.stringify(payload) }),
+  importHotSearch: (file: File) => {
+    const data = new FormData();
+    data.append('file', file);
+    return request<Record<string, unknown>>('/hot-search/import', { method: 'POST', body: data });
+  },
   importExcel: (file: File) => {
     const data = new FormData();
     data.append('file', file);

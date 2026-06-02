@@ -1,3 +1,4 @@
+import os
 import time
 
 from fastapi import FastAPI
@@ -10,6 +11,7 @@ from app.api import (
     routes_excel,
     routes_health,
     routes_history,
+    routes_hot_search,
     routes_learning,
     routes_llm,
     routes_products,
@@ -18,13 +20,22 @@ from app.api import (
 )
 from app.db import Base, SessionLocal, engine
 from app.seed import seed_default_rules
+from app.services.hot_search_service import seed_default_hot_search_avoid_rules
 
 app = FastAPI(title="Vipshop Kidswear Copy Agent System")
 
+
+def cors_origins() -> list[str]:
+    raw = os.getenv("CORS_ORIGINS", "http://localhost,http://127.0.0.1,http://localhost:5173,http://127.0.0.1:5173").strip()
+    if raw == "*":
+        return ["*"]
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=cors_origins(),
+    allow_credentials=os.getenv("CORS_ALLOW_CREDENTIALS", "false").lower() == "true",
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -49,6 +60,7 @@ def on_startup() -> None:
     db = SessionLocal()
     try:
         seed_default_rules(db)
+        seed_default_hot_search_avoid_rules(db)
     finally:
         db.close()
 
@@ -60,5 +72,6 @@ app.include_router(routes_skus.router)
 app.include_router(routes_copies.router)
 app.include_router(routes_rules.router)
 app.include_router(routes_history.router)
+app.include_router(routes_hot_search.router)
 app.include_router(routes_learning.router)
 app.include_router(routes_excel.router)
