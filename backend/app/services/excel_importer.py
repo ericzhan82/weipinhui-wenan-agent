@@ -6,10 +6,10 @@ from app.models import Product, ProductSku
 ALIASES = {
     "style_no": ["款号", "款式", "商品款号"],
     "product_no": ["货号", "商品货号"],
-    "fba": ["FBA", "设计师卖点", "产品卖点"],
-    "category_3": ["三级品类", "三类目"],
-    "category_4": ["四级品类", "四类目"],
-    "age_range": ["适用岁段", "适应岁段", "年龄段"],
+    "fba": ["FBA", "设计师卖点", "产品卖点", "FBA设计师卖点"],
+    "category_3": ["三级品类", "三类目", "三级分类", "三级分类名称"],
+    "category_4": ["四级品类", "四类目", "四级分类", "四级分类名称"],
+    "age_range": ["适用岁段", "适应岁段", "年龄段", "尺码段"],
     "gender": ["性别"],
     "season": ["季节"],
     "scene": ["场景"],
@@ -30,6 +30,19 @@ def _header_map(headers: list[str]) -> dict[str, int]:
     return mapping
 
 
+def _find_header_row(rows: list[tuple], max_scan_rows: int = 10) -> tuple[int, dict[str, int]]:
+    best_row_index = 0
+    best_mapping: dict[str, int] = {}
+    for row_index, row in enumerate(rows[:max_scan_rows]):
+        mapping = _header_map([str(cell or "").strip() for cell in row])
+        if "style_no" in mapping or "product_no" in mapping:
+            return row_index, mapping
+        if len(mapping) > len(best_mapping):
+            best_row_index = row_index
+            best_mapping = mapping
+    return best_row_index, best_mapping
+
+
 def _value(row: tuple, mapping: dict[str, int], field: str) -> str | None:
     index = mapping.get(field)
     if index is None or index >= len(row):
@@ -38,17 +51,23 @@ def _value(row: tuple, mapping: dict[str, int], field: str) -> str | None:
     return str(value).strip() if value is not None else None
 
 
+def _is_empty_row(row: tuple) -> bool:
+    return all(str(value).strip() == "" for value in row if value is not None)
+
+
 def import_excel(db: Session, file_path: str) -> dict:
     workbook = load_workbook(file_path)
     sheet = workbook.active
     rows = list(sheet.iter_rows(values_only=True))
     if not rows:
         return {"success_count": 0, "failed_rows": [{"row": 1, "reason": "空文件"}], "skipped_count": 0}
-    mapping = _header_map([str(cell or "").strip() for cell in rows[0]])
+    header_row_index, mapping = _find_header_row(rows)
     success = 0
     skipped = 0
     failed: list[dict] = []
-    for row_no, row in enumerate(rows[1:], start=2):
+    for row_no, row in enumerate(rows[header_row_index + 1 :], start=header_row_index + 2):
+        if _is_empty_row(row):
+            continue
         style_no = _value(row, mapping, "style_no")
         product_no = _value(row, mapping, "product_no")
         if not style_no and not product_no:
