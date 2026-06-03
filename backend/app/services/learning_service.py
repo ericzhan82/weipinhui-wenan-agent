@@ -5,8 +5,11 @@ from sqlalchemy.orm import Session
 from app.models import CopyVersion, LearningReport, Rule, RuleSuggestion
 
 
-def _latest_versions(db: Session) -> list[tuple[CopyVersion, CopyVersion]]:
-    versions = db.query(CopyVersion).order_by(CopyVersion.product_id, CopyVersion.version_no).all()
+def _latest_versions(db: Session, workspace_id: int | None = None) -> list[tuple[CopyVersion, CopyVersion]]:
+    query = db.query(CopyVersion)
+    if workspace_id is not None:
+        query = query.filter(CopyVersion.workspace_id == workspace_id)
+    versions = query.order_by(CopyVersion.product_id, CopyVersion.version_no).all()
     grouped: dict[int, dict[str, CopyVersion]] = defaultdict(dict)
     for version in versions:
         if version.version_type in ("model_generated", "manual_edit"):
@@ -23,8 +26,8 @@ def _tokenize(text: str | None) -> list[str]:
     return [text[i : i + 2] for i in range(max(len(text) - 1, 0)) if text[i : i + 2].strip()]
 
 
-def analyze_learning(db: Session) -> LearningReport:
-    pairs = _latest_versions(db)
+def analyze_learning(db: Session, workspace_id: int | None = None) -> LearningReport:
+    pairs = _latest_versions(db, workspace_id)
     kept = Counter()
     removed = Counter()
     patterns = Counter()
@@ -56,6 +59,7 @@ def analyze_learning(db: Session) -> LearningReport:
         "主图卖点优先保留穿着体验和消费顾虑表达。",
     ]
     report = LearningReport(
+        workspace_id=workspace_id,
         report_title="文案人工编辑学习报告",
         summary=summary,
         sample_count=sample_count,
@@ -69,6 +73,7 @@ def analyze_learning(db: Session) -> LearningReport:
     if sample_count:
         db.add(
             RuleSuggestion(
+                workspace_id=workspace_id,
                 suggestion_type="general",
                 content="人工编辑更偏好可感知利益点，建议在生成规则中强化穿着体验、场景和顾虑解决表达。",
                 source_basis="版本对比/人工修改",
@@ -82,18 +87,18 @@ def analyze_learning(db: Session) -> LearningReport:
     return report
 
 
-def learning_summary(db: Session) -> dict:
+def learning_summary(db: Session, workspace_id: int | None = None) -> dict:
     return {
-        "reports": db.query(LearningReport).count(),
-        "pending_suggestions": db.query(RuleSuggestion).filter(RuleSuggestion.status == "pending").count(),
-        "manual_versions": db.query(CopyVersion).filter(CopyVersion.version_type == "manual_edit").count(),
-        "model_versions": db.query(CopyVersion).filter(CopyVersion.version_type == "model_generated").count(),
+        "reports": db.query(LearningReport).filter(LearningReport.workspace_id == workspace_id).count(),
+        "pending_suggestions": db.query(RuleSuggestion).filter(RuleSuggestion.workspace_id == workspace_id, RuleSuggestion.status == "pending").count(),
+        "manual_versions": db.query(CopyVersion).filter(CopyVersion.workspace_id == workspace_id, CopyVersion.version_type == "manual_edit").count(),
+        "model_versions": db.query(CopyVersion).filter(CopyVersion.workspace_id == workspace_id, CopyVersion.version_type == "model_generated").count(),
     }
 
 
-def accept_suggestion(db: Session, suggestion_id: int, reviewer: str) -> RuleSuggestion:
+def accept_suggestion(db: Session, suggestion_id: int, reviewer: str, workspace_id: int | None = None) -> RuleSuggestion:
     suggestion = db.get(RuleSuggestion, suggestion_id)
-    if not suggestion:
+    if not suggestion or suggestion.workspace_id != workspace_id:
         raise ValueError("规则建议不存在")
     suggestion.status = "accepted"
     suggestion.reviewed_by = reviewer
@@ -102,6 +107,7 @@ def accept_suggestion(db: Session, suggestion_id: int, reviewer: str) -> RuleSug
     suggestion.reviewed_at = now()
     db.add(
         Rule(
+            workspace_id=workspace_id,
             rule_type=suggestion.suggestion_type,
             rule_name=f"学习建议-{suggestion.id}",
             content=f"{suggestion.content}\n\n依据：{suggestion.source_basis}",
@@ -114,9 +120,9 @@ def accept_suggestion(db: Session, suggestion_id: int, reviewer: str) -> RuleSug
     return suggestion
 
 
-def reject_suggestion(db: Session, suggestion_id: int, reviewer: str) -> RuleSuggestion:
+def reject_suggestion(db: Session, suggestion_id: int, reviewer: str, workspace_id: int | None = None) -> RuleSuggestion:
     suggestion = db.get(RuleSuggestion, suggestion_id)
-    if not suggestion:
+    if not suggestion or suggestion.workspace_id != workspace_id:
         raise ValueError("规则建议不存在")
     suggestion.status = "rejected"
     suggestion.reviewed_by = reviewer

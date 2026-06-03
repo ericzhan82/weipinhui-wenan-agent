@@ -84,6 +84,7 @@ class ProductRead(ProductBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    workspace_id: int | None = None
     skus: list[SkuRead] = Field(default_factory=list)
     copy_output: CopyRead | None = None
     created_at: datetime
@@ -112,6 +113,131 @@ class ValidateCopyRequest(BaseModel):
 
 class CopyGenerateRequest(BaseModel):
     use_hot_search: bool | None = None
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AuthUserRead(BaseModel):
+    id: int
+    email: str
+    display_name: str
+    is_system_admin: bool
+    workspaces: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: AuthUserRead
+
+
+class WorkspaceCreate(BaseModel):
+    name: str
+    slug: str | None = None
+
+
+class WorkspaceRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    slug: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class UserCreate(BaseModel):
+    email: str
+    display_name: str
+    password: str
+    is_system_admin: bool = False
+    workspace_id: int | None = None
+    role: str = "editor"
+
+
+class UserRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email: str
+    display_name: str
+    is_active: bool
+    is_system_admin: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class WorkspaceMemberCreate(BaseModel):
+    user_id: int
+    role: str = "editor"
+
+
+class WorkspaceMemberUpdate(BaseModel):
+    role: str
+
+
+class WorkspaceMemberRead(BaseModel):
+    id: int
+    workspace_id: int
+    user_id: int
+    role: str
+    email: str | None = None
+    display_name: str | None = None
+
+
+class CopyBatchCreate(BaseModel):
+    keyword: str | None = None
+    status: str | None = None
+    gender: str | None = None
+    season: str | None = None
+    overwrite_existing: bool = False
+    use_hot_search: bool | None = None
+
+
+class CopyBatchRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    workspace_id: int
+    batch_no: str
+    status: str
+    filter_json: dict[str, Any]
+    overwrite_existing: bool
+    use_hot_search: bool | None
+    total_count: int
+    pending_count: int
+    running_count: int
+    success_count: int
+    failed_count: int
+    skipped_count: int
+    canceled_count: int
+    created_by: str | None
+    started_at: datetime | None
+    finished_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CopyBatchItemRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    batch_id: int
+    product_id: int
+    status: str
+    error_message: str | None
+    started_at: datetime | None
+    finished_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CopyBatchDetail(BaseModel):
+    batch: CopyBatchRead
+    items: list[CopyBatchItemRead]
 
 
 class HotSearchConfigUpdate(BaseModel):

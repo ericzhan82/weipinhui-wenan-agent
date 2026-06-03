@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.auth import AuthContext, get_workspace_context, require_workspace_write
 from app.db import get_db
 from app.models import Product, ProductSku
 from app.schemas import ProductCreate, ProductRead, ProductUpdate
@@ -15,9 +16,10 @@ def list_products(
     status: str | None = None,
     gender: str | None = None,
     season: str | None = None,
+    context: AuthContext = Depends(get_workspace_context),
     db: Session = Depends(get_db),
 ):
-    query = db.query(Product)
+    query = db.query(Product).filter(Product.workspace_id == context.workspace_id)
     if keyword:
         like = f"%{keyword}%"
         query = query.filter(
@@ -39,9 +41,9 @@ def list_products(
 
 
 @router.post("", response_model=ProductRead)
-def create_product(payload: ProductCreate, db: Session = Depends(get_db)):
+def create_product(payload: ProductCreate, context: AuthContext = Depends(require_workspace_write), db: Session = Depends(get_db)):
     data = payload.model_dump(exclude={"skus"})
-    product = Product(**data)
+    product = Product(**data, workspace_id=context.workspace_id)
     db.add(product)
     db.flush()
     for sku in payload.skus:
@@ -52,17 +54,17 @@ def create_product(payload: ProductCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/{product_id}", response_model=ProductRead)
-def get_product(product_id: int, db: Session = Depends(get_db)):
+def get_product(product_id: int, context: AuthContext = Depends(get_workspace_context), db: Session = Depends(get_db)):
     product = db.get(Product, product_id)
-    if not product:
+    if not product or product.workspace_id != context.workspace_id:
         raise HTTPException(404, "商品不存在")
     return product
 
 
 @router.put("/{product_id}", response_model=ProductRead)
-def update_product(product_id: int, payload: ProductUpdate, db: Session = Depends(get_db)):
+def update_product(product_id: int, payload: ProductUpdate, context: AuthContext = Depends(require_workspace_write), db: Session = Depends(get_db)):
     product = db.get(Product, product_id)
-    if not product:
+    if not product or product.workspace_id != context.workspace_id:
         raise HTTPException(404, "商品不存在")
     for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(product, key, value)
@@ -72,9 +74,9 @@ def update_product(product_id: int, payload: ProductUpdate, db: Session = Depend
 
 
 @router.delete("/{product_id}")
-def delete_product(product_id: int, db: Session = Depends(get_db)):
+def delete_product(product_id: int, context: AuthContext = Depends(require_workspace_write), db: Session = Depends(get_db)):
     product = db.get(Product, product_id)
-    if not product:
+    if not product or product.workspace_id != context.workspace_id:
         raise HTTPException(404, "商品不存在")
     db.delete(product)
     db.commit()

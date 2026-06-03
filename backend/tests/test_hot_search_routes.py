@@ -8,8 +8,17 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.api.routes_hot_search import router
+from app.auth import AuthContext, get_workspace_context, require_workspace_write
 from app.db import Base, get_db
-from app.models import HotSearchTerm
+from app.models import HotSearchTerm, User, Workspace
+
+
+def _context():
+    return AuthContext(
+        user=User(id=1, email="tester@example.com", display_name="tester", password_hash="x", is_system_admin=True),
+        workspace=Workspace(id=1, name="默认工作空间", slug="default"),
+        role="system_admin",
+    )
 
 
 def _client():
@@ -31,6 +40,8 @@ def _client():
     app = FastAPI()
     app.include_router(router)
     app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_workspace_context] = _context
+    app.dependency_overrides[require_workspace_write] = _context
     return TestClient(app), db
 
 

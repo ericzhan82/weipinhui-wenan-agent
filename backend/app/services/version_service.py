@@ -27,6 +27,7 @@ def create_copy_version(
     version = CopyVersion(
         copy_output_id=copy_output.id if copy_output else None,
         product_id=product_id,
+        workspace_id=copy_output.workspace_id if copy_output else None,
         version_no=next_version_no(db, product_id),
         version_type=version_type,
         title=title,

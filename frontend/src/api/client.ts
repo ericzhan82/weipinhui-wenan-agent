@@ -1,18 +1,50 @@
 import type {
+  AuthUser,
+  CopyBatch,
+  CopyBatchDetail,
   CopyOutput,
   CopyVersion,
   HotSearchConfig,
   LearningReport,
+  LoginResponse,
   LlmConfig,
   LlmConfigPayload,
   Product,
   ProductSku,
   Rule,
   RuleSuggestion,
+  UserAccount,
   ValidationResult,
+  Workspace,
+  WorkspaceMember,
 } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+const TOKEN_KEY = 'vipshop_copy_access_token';
+const WORKSPACE_KEY = 'vipshop_copy_workspace_id';
+
+export function getAuthToken() {
+  return localStorage.getItem(TOKEN_KEY) || '';
+}
+
+export function setAuthToken(token: string) {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearAuthToken() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(WORKSPACE_KEY);
+}
+
+export function getWorkspaceId() {
+  const value = localStorage.getItem(WORKSPACE_KEY);
+  return value ? Number(value) : null;
+}
+
+export function setWorkspaceId(workspaceId: number | null) {
+  if (workspaceId) localStorage.setItem(WORKSPACE_KEY, String(workspaceId));
+  else localStorage.removeItem(WORKSPACE_KEY);
+}
 
 function formatUnknown(value: unknown): string {
   if (value == null) return '';
@@ -52,10 +84,16 @@ function formatNetworkError(path: string, error: unknown): string {
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   let response: Response;
+  const headers: Record<string, string> = {};
+  if (!(options.body instanceof FormData)) headers['Content-Type'] = 'application/json';
+  const token = getAuthToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const workspaceId = getWorkspaceId();
+  if (workspaceId) headers['X-Workspace-Id'] = String(workspaceId);
   try {
     response = await fetch(`${API_BASE}${path}`, {
-      headers: options.body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
       ...options,
+      headers: { ...headers, ...(options.headers as Record<string, string> | undefined) },
     });
   } catch (error) {
     throw new Error(formatNetworkError(path, error));
@@ -68,6 +106,23 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
+  login: (payload: { email: string; password: string }) =>
+    request<LoginResponse>('/auth/login', { method: 'POST', body: JSON.stringify(payload) }),
+  me: () => request<AuthUser>('/auth/me'),
+  logout: () => request<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
+  workspaces: () => request<Workspace[]>('/workspaces'),
+  createWorkspace: (payload: { name: string; slug?: string }) =>
+    request<Workspace>('/workspaces', { method: 'POST', body: JSON.stringify(payload) }),
+  users: () => request<UserAccount[]>('/users'),
+  createUser: (payload: { email: string; display_name: string; password: string; is_system_admin: boolean; workspace_id?: number | null; role?: string }) =>
+    request<UserAccount>('/users', { method: 'POST', body: JSON.stringify(payload) }),
+  members: (workspaceId: number) => request<WorkspaceMember[]>(`/workspaces/${workspaceId}/members`),
+  addMember: (workspaceId: number, payload: { user_id: number; role: string }) =>
+    request<WorkspaceMember>(`/workspaces/${workspaceId}/members`, { method: 'POST', body: JSON.stringify(payload) }),
+  updateMember: (workspaceId: number, userId: number, payload: { role: string }) =>
+    request<WorkspaceMember>(`/workspaces/${workspaceId}/members/${userId}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  deleteMember: (workspaceId: number, userId: number) =>
+    request<{ deleted: boolean }>(`/workspaces/${workspaceId}/members/${userId}`, { method: 'DELETE' }),
   products: (keyword = '') => request<Product[]>(`/products${keyword ? `?keyword=${encodeURIComponent(keyword)}` : ''}`),
   product: (id: number) => request<Product>(`/products/${id}`),
   createProduct: (payload: Product) => request<Product>('/products', { method: 'POST', body: JSON.stringify(payload) }),
@@ -131,4 +186,11 @@ export const api = {
     return request<Record<string, unknown>>('/excel/import', { method: 'POST', body: data });
   },
   exportExcel: (keyword = '') => request<{ export_id: string; download_url: string }>(`/excel/export${keyword ? `?keyword=${encodeURIComponent(keyword)}` : ''}`),
+  createCopyBatch: (payload: { keyword?: string; status?: string; gender?: string; season?: string; overwrite_existing?: boolean; use_hot_search?: boolean | null }) =>
+    request<CopyBatch>('/copy-batches', { method: 'POST', body: JSON.stringify(payload) }),
+  copyBatches: () => request<CopyBatch[]>('/copy-batches'),
+  copyBatch: (batchNo: string) => request<CopyBatchDetail>(`/copy-batches/${encodeURIComponent(batchNo)}`),
+  cancelCopyBatch: (batchNo: string) => request<CopyBatch>(`/copy-batches/${encodeURIComponent(batchNo)}/cancel`, { method: 'POST' }),
+  retryCopyBatch: (batchNo: string) => request<CopyBatch>(`/copy-batches/${encodeURIComponent(batchNo)}/retry-failed`, { method: 'POST' }),
+  exportCopyBatch: (batchNo: string) => request<{ export_id: string; filename: string; download_url: string }>(`/copy-batches/${encodeURIComponent(batchNo)}/export`),
 };

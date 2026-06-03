@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from app.auth import AuthContext, get_workspace_context, require_workspace_write
 from app.db import get_db
 from app.schemas import ExportResult, ImportResult
 from app.services.excel_exporter import export_products
@@ -23,18 +24,18 @@ def storage_dir() -> Path:
 
 
 @router.post("/import", response_model=ImportResult)
-async def import_file(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def import_file(file: UploadFile = File(...), context: AuthContext = Depends(require_workspace_write), db: Session = Depends(get_db)):
     if not file.filename.endswith(".xlsx"):
         raise HTTPException(400, "仅支持.xlsx文件")
     target = storage_dir() / "uploads" / f"{uuid4().hex}-{file.filename}"
     content = await file.read()
     target.write_bytes(content)
-    return import_excel(db, str(target))
+    return import_excel(db, str(target), workspace_id=context.workspace_id, operator_name=context.operator_name)
 
 
 @router.get("/export", response_model=ExportResult)
-def export_file(keyword: str | None = Query(default=None), db: Session = Depends(get_db)):
-    result = export_products(db, str(storage_dir()), keyword)
+def export_file(keyword: str | None = Query(default=None), context: AuthContext = Depends(get_workspace_context), db: Session = Depends(get_db)):
+    result = export_products(db, str(storage_dir()), keyword, workspace_id=context.workspace_id)
     return {
         "export_id": result["export_id"],
         "filename": result["filename"],

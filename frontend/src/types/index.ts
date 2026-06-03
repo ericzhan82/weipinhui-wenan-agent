@@ -127,3 +127,90 @@ export type HotSearchConfig = {
   enabled_by_default: boolean;
   updated_by?: string | null;
 };
+
+export type WorkspaceRef = {
+  id: number;
+  name: string;
+  slug: string;
+  role: 'system_admin' | 'workspace_admin' | 'editor' | 'viewer';
+};
+
+export type AuthUser = {
+  id: number;
+  email: string;
+  display_name: string;
+  is_system_admin: boolean;
+  workspaces: WorkspaceRef[];
+};
+
+export type LoginResponse = {
+  access_token: string;
+  token_type: string;
+  user: AuthUser;
+};
+
+export type Workspace = {
+  id: number;
+  name: string;
+  slug: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UserAccount = {
+  id: number;
+  email: string;
+  display_name: string;
+  is_active: boolean;
+  is_system_admin: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WorkspaceMember = {
+  id: number;
+  workspace_id: number;
+  user_id: number;
+  role: WorkspaceRef['role'] | 'workspace_admin' | 'editor' | 'viewer';
+  email?: string | null;
+  display_name?: string | null;
+};
+
+export type CopyBatch = {
+  id: number;
+  workspace_id: number;
+  batch_no: string;
+  status: string;
+  filter_json: Record<string, unknown>;
+  overwrite_existing: boolean;
+  use_hot_search?: boolean | null;
+  total_count: number;
+  pending_count: number;
+  running_count: number;
+  success_count: number;
+  failed_count: number;
+  skipped_count: number;
+  canceled_count: number;
+  created_by?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CopyBatchItem = {
+  id: number;
+  batch_id: number;
+  product_id: number;
+  status: string;
+  error_message?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CopyBatchDetail = {
+  batch: CopyBatch;
+  items: CopyBatchItem[];
+};

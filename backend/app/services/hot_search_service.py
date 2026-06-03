@@ -75,14 +75,15 @@ def _product_line(product: Product) -> str:
     return _clean(product.age_range)
 
 
-def seed_default_hot_search_avoid_rules(db: Session) -> None:
-    existing = db.query(Rule).filter(Rule.rule_type == "hot_search_avoid_terms").first()
+def seed_default_hot_search_avoid_rules(db: Session, workspace_id: int | None = None) -> None:
+    existing = db.query(Rule).filter(Rule.rule_type == "hot_search_avoid_terms", Rule.workspace_id == workspace_id).first()
     if existing:
         return
     for line, terms in DEFAULT_AVOID_TERMS.items():
         db.add(
             Rule(
                 rule_type="hot_search_avoid_terms",
+                workspace_id=workspace_id,
                 rule_name=line,
                 content=terms,
                 enabled=True,
@@ -92,27 +93,27 @@ def seed_default_hot_search_avoid_rules(db: Session) -> None:
     db.commit()
 
 
-def get_hot_search_config(db: Session) -> dict:
-    config = db.query(HotSearchConfig).order_by(HotSearchConfig.id.asc()).first()
+def get_hot_search_config(db: Session, workspace_id: int | None = None) -> dict:
+    config = db.query(HotSearchConfig).filter(HotSearchConfig.workspace_id == workspace_id).order_by(HotSearchConfig.id.asc()).first()
     return {
         "enabled_by_default": bool(config.enabled_by_default) if config else False,
         "updated_by": config.updated_by if config else None,
     }
 
 
-def set_hot_search_config(db: Session, enabled_by_default: bool, updated_by: str = "operator") -> dict:
-    config = db.query(HotSearchConfig).order_by(HotSearchConfig.id.asc()).first()
+def set_hot_search_config(db: Session, enabled_by_default: bool, updated_by: str = "operator", workspace_id: int | None = None) -> dict:
+    config = db.query(HotSearchConfig).filter(HotSearchConfig.workspace_id == workspace_id).order_by(HotSearchConfig.id.asc()).first()
     if not config:
-        config = HotSearchConfig()
+        config = HotSearchConfig(workspace_id=workspace_id)
         db.add(config)
     config.enabled_by_default = enabled_by_default
     config.updated_by = updated_by
     db.commit()
     db.refresh(config)
-    return get_hot_search_config(db)
+    return get_hot_search_config(db, workspace_id)
 
 
-def import_hot_search_file(db: Session, file_path: str, uploaded_by: str = "operator") -> dict:
+def import_hot_search_file(db: Session, file_path: str, uploaded_by: str = "operator", workspace_id: int | None = None) -> dict:
     workbook = load_workbook(file_path, data_only=True)
     sheet = workbook.active
     rows = list(sheet.iter_rows(values_only=True))
@@ -126,7 +127,7 @@ def import_hot_search_file(db: Session, file_path: str, uploaded_by: str = "oper
             "categories": [],
         }
 
-    batch = HotSearchBatch(filename=Path(file_path).name, uploaded_by=uploaded_by)
+    batch = HotSearchBatch(filename=Path(file_path).name, uploaded_by=uploaded_by, workspace_id=workspace_id)
     db.add(batch)
     db.flush()
     imported = 0
@@ -170,7 +171,12 @@ def _avoid_terms_for_product(db: Session, product: Product) -> list[str]:
         return []
     rule = (
         db.query(Rule)
-        .filter(Rule.rule_type == "hot_search_avoid_terms", Rule.rule_name == line, Rule.enabled.is_(True))
+        .filter(
+            Rule.rule_type == "hot_search_avoid_terms",
+            Rule.rule_name == line,
+            Rule.workspace_id == product.workspace_id,
+            Rule.enabled.is_(True),
+        )
         .first()
     )
     return _split_terms(rule.content if rule else "")
@@ -192,7 +198,12 @@ def select_hot_terms_for_product(db: Session, product: Product, limit: int = 10)
             "excluded_hot_terms": [],
             "hot_search_source_batch": None,
         }
-    batch = db.query(HotSearchBatch).order_by(HotSearchBatch.created_at.desc(), HotSearchBatch.id.desc()).first()
+    batch = (
+        db.query(HotSearchBatch)
+        .filter(HotSearchBatch.workspace_id == product.workspace_id)
+        .order_by(HotSearchBatch.created_at.desc(), HotSearchBatch.id.desc())
+        .first()
+    )
     if not batch:
         return {
             "selected_hot_terms": [],

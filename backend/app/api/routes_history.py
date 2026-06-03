@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.auth import AuthContext, get_workspace_context, require_workspace_write
 from app.db import get_db
 from app.models import HistoryCase
 from app.schemas import HistoryCaseCreate
@@ -19,9 +20,10 @@ def list_history_cases(
     season: str | None = None,
     scene: str | None = None,
     keyword: str | None = Query(default=None),
+    context: AuthContext = Depends(get_workspace_context),
     db: Session = Depends(get_db),
 ):
-    query = db.query(HistoryCase)
+    query = db.query(HistoryCase).filter(HistoryCase.workspace_id == context.workspace_id)
     filters = {
         HistoryCase.style_no: style_no,
         HistoryCase.category_3: category_3,
@@ -47,8 +49,8 @@ def list_history_cases(
 
 
 @router.post("/products/{product_id}/save-history-case")
-def create_history_case(product_id: int, payload: HistoryCaseCreate, db: Session = Depends(get_db)):
+def create_history_case(product_id: int, payload: HistoryCaseCreate, context: AuthContext = Depends(require_workspace_write), db: Session = Depends(get_db)):
     try:
-        return save_history_case(db, product_id, payload.reason, payload.operator_name)
+        return save_history_case(db, product_id, payload.reason, context.operator_name, context.workspace_id)
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc

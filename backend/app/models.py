@@ -1,6 +1,6 @@
 from datetime import UTC, date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
@@ -15,6 +15,7 @@ class Product(Base):
     __tablename__ = "products"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.id"), nullable=True, index=True)
     style_no: Mapped[str | None] = mapped_column(String(120), index=True)
     product_no: Mapped[str | None] = mapped_column(String(120), index=True)
     category_3: Mapped[str | None] = mapped_column(String(120), index=True)
@@ -62,6 +63,7 @@ class CopyOutput(Base):
     __tablename__ = "copy_outputs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.id"), nullable=True, index=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), unique=True, index=True)
     title: Mapped[str | None] = mapped_column(Text)
     main_image_tags: Mapped[list[str]] = mapped_column(JSON, default=list)
@@ -83,6 +85,7 @@ class CopyVersion(Base):
     __tablename__ = "copy_versions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.id"), nullable=True, index=True)
     copy_output_id: Mapped[int | None] = mapped_column(ForeignKey("copy_outputs.id"), nullable=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
     version_no: Mapped[int] = mapped_column(Integer)
@@ -102,6 +105,7 @@ class ValidationResult(Base):
     __tablename__ = "validation_results"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.id"), nullable=True, index=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
     copy_output_id: Mapped[int | None] = mapped_column(ForeignKey("copy_outputs.id"), nullable=True)
     passed: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -115,6 +119,7 @@ class Rule(Base):
     __tablename__ = "rules"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.id"), nullable=True, index=True)
     rule_type: Mapped[str] = mapped_column(String(80), index=True)
     rule_name: Mapped[str] = mapped_column(String(160), index=True)
     content: Mapped[str] = mapped_column(Text)
@@ -128,6 +133,7 @@ class HistoryCase(Base):
     __tablename__ = "history_cases"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.id"), nullable=True, index=True)
     product_id: Mapped[int | None] = mapped_column(ForeignKey("products.id"), nullable=True)
     style_no: Mapped[str | None] = mapped_column(String(120), index=True)
     category_3: Mapped[str | None] = mapped_column(String(120), index=True)
@@ -149,6 +155,7 @@ class RuleSuggestion(Base):
     __tablename__ = "rule_suggestions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.id"), nullable=True, index=True)
     suggestion_type: Mapped[str] = mapped_column(String(80), index=True)
     content: Mapped[str] = mapped_column(Text)
     source_basis: Mapped[str | None] = mapped_column(Text)
@@ -164,6 +171,7 @@ class LearningReport(Base):
     __tablename__ = "learning_reports"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.id"), nullable=True, index=True)
     report_title: Mapped[str] = mapped_column(String(200))
     summary: Mapped[str] = mapped_column(Text)
     sample_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -197,6 +205,7 @@ class HotSearchConfig(Base):
     __tablename__ = "hot_search_configs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.id"), nullable=True, index=True)
     enabled_by_default: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     updated_by: Mapped[str | None] = mapped_column(String(80))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
@@ -207,6 +216,7 @@ class HotSearchBatch(Base):
     __tablename__ = "hot_search_batches"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.id"), nullable=True, index=True)
     filename: Mapped[str | None] = mapped_column(String(240))
     uploaded_by: Mapped[str | None] = mapped_column(String(80))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)
@@ -239,6 +249,7 @@ class PerformanceMetric(Base):
     __tablename__ = "performance_metrics"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.id"), nullable=True, index=True)
     product_id: Mapped[int | None] = mapped_column(ForeignKey("products.id"), nullable=True)
     style_no: Mapped[str | None] = mapped_column(String(120), index=True)
     exposure_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -250,3 +261,76 @@ class PerformanceMetric(Base):
     gmv: Mapped[float] = mapped_column(Float, default=0)
     metric_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class Workspace(Base):
+    __tablename__ = "workspaces"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(160), unique=True, index=True)
+    slug: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    email: Mapped[str] = mapped_column(String(240), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(120))
+    password_hash: Mapped[str] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    is_system_admin: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class WorkspaceMembership(Base):
+    __tablename__ = "workspace_memberships"
+    __table_args__ = (UniqueConstraint("workspace_id", "user_id", name="uq_workspace_user"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    role: Mapped[str] = mapped_column(String(40), default="editor", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class CopyBatch(Base):
+    __tablename__ = "copy_batches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), index=True)
+    batch_no: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(40), default="queued", index=True)
+    filter_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    overwrite_existing: Mapped[bool] = mapped_column(Boolean, default=False)
+    use_hot_search: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    total_count: Mapped[int] = mapped_column(Integer, default=0)
+    pending_count: Mapped[int] = mapped_column(Integer, default=0)
+    running_count: Mapped[int] = mapped_column(Integer, default=0)
+    success_count: Mapped[int] = mapped_column(Integer, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0)
+    skipped_count: Mapped[int] = mapped_column(Integer, default=0)
+    canceled_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_by: Mapped[str | None] = mapped_column(String(120))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class CopyBatchItem(Base):
+    __tablename__ = "copy_batch_items"
+    __table_args__ = (UniqueConstraint("batch_id", "product_id", name="uq_copy_batch_product"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    batch_id: Mapped[int] = mapped_column(ForeignKey("copy_batches.id"), index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
+    status: Mapped[str] = mapped_column(String(40), default="pending", index=True)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)

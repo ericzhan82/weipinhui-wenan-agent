@@ -1,4 +1,4 @@
-import { ArrowRight, CheckCircle2, Database, Download, FileCheck2, Plus, Search, Sparkles, Trash2, Workflow } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Database, Download, FileCheck2, FileClock, Plus, Search, Sparkles, Trash2, Workflow } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import type { Product } from '../types';
@@ -7,6 +7,9 @@ export function ProductListPage() {
   const [items, setItems] = useState<Product[]>([]);
   const [keyword, setKeyword] = useState('');
   const [message, setMessage] = useState('');
+  const [useHotSearch, setUseHotSearch] = useState(false);
+  const [overwriteExisting, setOverwriteExisting] = useState(false);
+  const [batchBusy, setBatchBusy] = useState(false);
   const load = async () => setItems(await api.products(keyword));
   useEffect(() => { void load(); }, []);
 
@@ -19,6 +22,24 @@ export function ProductListPage() {
     window.location.href = result.download_url;
   };
 
+  const createBatch = async () => {
+    setBatchBusy(true);
+    setMessage('');
+    try {
+      const batch = await api.createCopyBatch({
+        keyword: keyword.trim() || undefined,
+        overwrite_existing: overwriteExisting,
+        use_hot_search: useHotSearch,
+      });
+      setMessage(`批量任务 ${batch.batch_no} 已创建：${batch.pending_count} 条待生成，${batch.skipped_count} 条已跳过。`);
+      window.location.hash = `#/copy-batches/${batch.batch_no}`;
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBatchBusy(false);
+    }
+  };
+
   return (
     <main className="page ai-page">
       <div className="page-head ai-head">
@@ -28,6 +49,7 @@ export function ProductListPage() {
           <p>每个商品是一条 AI 任务：先看上下文是否可用，再进入生成、校验、定稿和沉淀。</p>
         </div>
         <div className="toolbar">
+          <button disabled={batchBusy} onClick={createBatch}><FileClock size={16} />{batchBusy ? '创建中' : '创建批量任务'}</button>
           <button onClick={exportExcel}><Download size={16} />导出任务结果</button>
           <a className="button primary" href="#/products/new"><Plus size={16} />新建上下文</a>
         </div>
@@ -67,6 +89,21 @@ export function ProductListPage() {
           <Search size={17} />
           <input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜索款号、货号、品类、FBA 上下文" onKeyDown={(event) => event.key === 'Enter' && void load()} />
           <button onClick={load}>更新队列</button>
+        </div>
+        <div className="batch-create-strip">
+          <div>
+            <strong><FileClock size={16} />按当前筛选创建批量生成任务</strong>
+            <span>{keyword.trim() ? `筛选关键词：${keyword.trim()}` : '未输入关键词时会纳入当前工作空间全部商品'}</span>
+          </div>
+          <label className="check-row">
+            <input type="checkbox" checked={useHotSearch} onChange={(event) => setUseHotSearch(event.target.checked)} />
+            启用热搜词
+          </label>
+          <label className="check-row">
+            <input type="checkbox" checked={overwriteExisting} onChange={(event) => setOverwriteExisting(event.target.checked)} />
+            覆盖已有标题
+          </label>
+          <button className="primary" disabled={batchBusy} onClick={createBatch}><FileClock size={16} />创建任务号</button>
         </div>
         {message && <p className="notice">{message}</p>}
         <div className="task-queue">

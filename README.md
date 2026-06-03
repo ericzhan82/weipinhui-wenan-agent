@@ -14,6 +14,8 @@
 ## 功能清单
 
 - AI 文案任务队列、模型上下文录入、搜索、详情、删除。
+- 内置账号登录、角色权限、工作空间隔离。
+- 批量生成任务号、后台队列生成、按任务号导出成功结果。
 - SKC/颜色素材新增、编辑、删除。
 - mock 模式文案生成；数据库模型配置优先调用外部模型。
 - 文案在线编辑、保存、重写、校验。
@@ -26,12 +28,14 @@
 ## 页面说明
 
 - `/products`：AI 文案生成任务队列，支持搜索、新建上下文、导出和进入生成任务。
+- `/copy-batches`：批量生成任务，支持查看进度、取消、重试失败项、按任务号导出。
 - `/products/new`：新建模型上下文，支持同时添加多个颜色素材。
 - `/products/:id`：模型上下文、颜色素材、文案生成/重写/编辑/校验/版本/优秀案例。
 - `/excel-import`：素材接入管线，把 Excel 转成模型上下文与待生成任务。
 - `/rules`：规则记忆库管理和学习建议审核。
 - `/history-cases`：案例记忆检索。
 - `/learning`：AI 学习回路、偏好摘要和规则优化建议。
+- `/admin`：账号、工作空间和成员角色管理。
 - `/settings`：模型 API 配置，支持不同厂商、Base URL、模型名和 API Key 入库。
 
 ## 本地 Docker 启动
@@ -40,6 +44,18 @@
 cp .env.example .env
 docker compose up -d --build
 ```
+
+首次部署必须在 `.env` 中修改：
+
+```env
+POSTGRES_PASSWORD=强密码
+AUTH_SECRET=登录签名密钥
+ADMIN_EMAIL=管理员邮箱
+ADMIN_PASSWORD=管理员初始密码
+COPY_BATCH_WORKER_CONCURRENCY=1
+```
+
+约 3GB 云服务器建议保持 `COPY_BATCH_WORKER_CONCURRENCY=1`；需要更快时最多调到 `2`，避免多个大模型请求同时占满内存。
 
 访问：
 
@@ -155,6 +171,11 @@ mock 模式不调用外部服务，会根据 FBA、品类、季节、场景生�
 - `rule_suggestions`
 - `llm_configs`
 - `performance_metrics`
+- `workspaces`
+- `users`
+- `workspace_memberships`
+- `copy_batches`
+- `copy_batch_items`
 
 ## Excel 导入导出说明
 
@@ -165,6 +186,8 @@ mock 模式不调用外部服务，会根据 FBA、品类、季节、场景生�
 - P 列：唯品标题
 - Q 列：主图打标卖点
 - R 列：颜色词文案
+
+批量生成导出请在 `/copy-batches` 按任务号导出，只包含该批次成功生成的商品，不会混入历史已生成结果。
 
 ## 文案学习闭环说明
 
@@ -212,8 +235,8 @@ git push -u origin main
 
 - API Key 通过 `/settings` 写入数据库，接口只返回是否已设置；`.env` 仅作为无数据库配置时的兜底。
 - 不要把 `.env`、真实 Excel、数据库数据提交到 GitHub。
-- 云端部署时请修改 `POSTGRES_PASSWORD`。
-- 当前版本不内置登录账号体系；公网部署前请配置 HTTPS、访问控制或防火墙白名单。
+- 云端部署时请修改 `POSTGRES_PASSWORD`、`AUTH_SECRET`、`ADMIN_PASSWORD`。
+- 当前版本已内置登录账号体系；公网部署仍建议配置 HTTPS。
 - 如果后端端口单独暴露，请将 `CORS_ORIGINS` 设置为明确域名。
 - 备份 `data/` 与 `storage/` 时注意权限和敏感数据。
 

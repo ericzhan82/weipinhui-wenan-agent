@@ -2,7 +2,24 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.routes_copies import router
+from app.auth import AuthContext, require_workspace_write
 from app.db import get_db
+from app.models import Product, User, Workspace
+
+
+class FakeDb:
+    def get(self, model, value):
+        if model is Product and value == 7:
+            return Product(id=7, workspace_id=1)
+        return None
+
+
+def _context():
+    return AuthContext(
+        user=User(id=1, email="tester@example.com", display_name="tester", password_hash="x", is_system_admin=True),
+        workspace=Workspace(id=1, name="默认工作空间", slug="default"),
+        role="system_admin",
+    )
 
 
 def test_generate_copy_route_passes_hot_search_override(monkeypatch):
@@ -14,12 +31,13 @@ def test_generate_copy_route_passes_hot_search_override(monkeypatch):
         return {"product_id": product_id, "hot_search_enabled": bool(use_hot_search)}
 
     def override_db():
-        yield object()
+        yield FakeDb()
 
     monkeypatch.setattr("app.api.routes_copies.generate_copy_for_product", fake_generate_copy_for_product)
     app = FastAPI()
     app.include_router(router)
     app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[require_workspace_write] = _context
     client = TestClient(app)
 
     response = client.post("/api/products/7/generate-copy", json={"use_hot_search": True})

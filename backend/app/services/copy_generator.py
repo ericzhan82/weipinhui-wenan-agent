@@ -187,8 +187,11 @@ def product_to_dict(product: Product) -> dict:
     }
 
 
-def _rules(db: Session) -> list[Rule]:
-    return db.query(Rule).filter(Rule.enabled.is_(True)).all()
+def _rules(db: Session, workspace_id: int | None = None) -> list[Rule]:
+    query = db.query(Rule).filter(Rule.enabled.is_(True))
+    if workspace_id is not None:
+        query = query.filter(Rule.workspace_id == workspace_id)
+    return query.all()
 
 
 def _forbidden_terms(rules: list[Rule]) -> list[str]:
@@ -203,6 +206,7 @@ def _history(db: Session, product: Product) -> list[dict]:
     cases = (
         db.query(HistoryCase)
         .filter(HistoryCase.category_3 == product.category_3)
+        .filter(HistoryCase.workspace_id == product.workspace_id)
         .order_by(HistoryCase.created_at.desc())
         .limit(5)
         .all()
@@ -225,7 +229,7 @@ def _base_hot_search_context(enabled: bool = False) -> dict:
 
 
 def _resolve_hot_search_context(db: Session, product: Product, use_hot_search: bool | None) -> dict:
-    enabled = bool(get_hot_search_config(db)["enabled_by_default"]) if use_hot_search is None else use_hot_search
+    enabled = bool(get_hot_search_config(db, product.workspace_id)["enabled_by_default"]) if use_hot_search is None else use_hot_search
     if not enabled:
         return _base_hot_search_context(False)
     selected = select_hot_terms_for_product(db, product)
@@ -278,9 +282,10 @@ def _upsert_copy_output(
     output = db.query(CopyOutput).filter(CopyOutput.product_id == product.id).first()
     client = client or get_llm_client(db)
     if not output:
-        output = CopyOutput(product_id=product.id, created_by=operator_name)
+        output = CopyOutput(product_id=product.id, workspace_id=product.workspace_id, created_by=operator_name)
         db.add(output)
         db.flush()
+    output.workspace_id = product.workspace_id
     output.title = payload.get("title")
     output.main_image_tags = payload.get("main_image_tags") or []
     output.color_copy = payload.get("color_copy")
@@ -314,7 +319,7 @@ def generate_copy_for_product(
     product = db.get(Product, product_id)
     if not product:
         raise ValueError("商品不存在")
-    rules = _rules(db)
+    rules = _rules(db, product.workspace_id)
     product_payload = product_to_dict(product)
     client = get_llm_client(db)
     hot_search_context = _resolve_hot_search_context(db, product, use_hot_search)
@@ -378,6 +383,7 @@ def generate_copy_for_product(
     db.add(
         ValidationResult(
             product_id=product.id,
+            workspace_id=product.workspace_id,
             copy_output_id=output.id,
             passed=validation["passed"],
             errors_json=validation["errors"],
@@ -410,7 +416,7 @@ def rewrite_copy_for_product(db: Session, product_id: int, instruction: str, ope
     current = product.copy_output
     if not current:
         return generate_copy_for_product(db, product_id, operator_name)
-    rules = _rules(db)
+    rules = _rules(db, product.workspace_id)
     current_payload = {
         "title": current.title,
         "main_image_tags": current.main_image_tags,
@@ -479,7 +485,7 @@ def validate_product_copy(
     if not product:
         raise ValueError("商品不存在")
     output = product.copy_output
-    rules = _rules(db)
+    rules = _rules(db, product.workspace_id)
     result = validate_copy_payload(
         title if title is not None else (output.title if output else ""),
         main_image_tags if main_image_tags is not None else (output.main_image_tags if output else []),
@@ -489,6 +495,7 @@ def validate_product_copy(
     )
     validation = ValidationResult(
         product_id=product.id,
+        workspace_id=product.workspace_id,
         copy_output_id=output.id if output else None,
         passed=result["passed"],
         errors_json=result["errors"],

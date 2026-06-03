@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.auth import get_current_user, require_system_admin
 from app.db import get_db
-from app.models import LlmConfig
+from app.models import LlmConfig, User
 from app.schemas import LlmConfigCreate, LlmConfigRead, LlmConfigUpdate
 from app.services.llm import get_llm_status
 
@@ -10,7 +11,7 @@ router = APIRouter(prefix="/api/llm", tags=["llm"])
 
 
 @router.get("/status")
-def llm_status(db: Session = Depends(get_db)) -> dict:
+def llm_status(_: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
     return get_llm_status(db)
 
 
@@ -41,13 +42,13 @@ def _disable_other_configs(db: Session, active_id: int | None = None) -> None:
 
 
 @router.get("/configs", response_model=list[LlmConfigRead])
-def list_llm_configs(db: Session = Depends(get_db)) -> list[LlmConfigRead]:
+def list_llm_configs(db: Session = Depends(get_db), _: User = Depends(require_system_admin)) -> list[LlmConfigRead]:
     configs = db.query(LlmConfig).order_by(LlmConfig.enabled.desc(), LlmConfig.updated_at.desc()).all()
     return [_read_config(config) for config in configs]
 
 
 @router.post("/configs", response_model=LlmConfigRead)
-def create_llm_config(payload: LlmConfigCreate, db: Session = Depends(get_db)) -> LlmConfigRead:
+def create_llm_config(payload: LlmConfigCreate, db: Session = Depends(get_db), _: User = Depends(require_system_admin)) -> LlmConfigRead:
     if payload.enabled:
         _disable_other_configs(db)
     config = LlmConfig(**payload.model_dump(exclude={"api_key"}), api_key=payload.api_key or None)
@@ -58,7 +59,7 @@ def create_llm_config(payload: LlmConfigCreate, db: Session = Depends(get_db)) -
 
 
 @router.put("/configs/{config_id}", response_model=LlmConfigRead)
-def update_llm_config(config_id: int, payload: LlmConfigUpdate, db: Session = Depends(get_db)) -> LlmConfigRead:
+def update_llm_config(config_id: int, payload: LlmConfigUpdate, db: Session = Depends(get_db), _: User = Depends(require_system_admin)) -> LlmConfigRead:
     config = db.get(LlmConfig, config_id)
     if not config:
         raise HTTPException(status_code=404, detail="模型配置不存在")
@@ -76,7 +77,7 @@ def update_llm_config(config_id: int, payload: LlmConfigUpdate, db: Session = De
 
 
 @router.post("/configs/{config_id}/activate", response_model=LlmConfigRead)
-def activate_llm_config(config_id: int, db: Session = Depends(get_db)) -> LlmConfigRead:
+def activate_llm_config(config_id: int, db: Session = Depends(get_db), _: User = Depends(require_system_admin)) -> LlmConfigRead:
     config = db.get(LlmConfig, config_id)
     if not config:
         raise HTTPException(status_code=404, detail="模型配置不存在")

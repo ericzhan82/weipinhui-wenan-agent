@@ -55,7 +55,7 @@ def _is_empty_row(row: tuple) -> bool:
     return all(str(value).strip() == "" for value in row if value is not None)
 
 
-def import_excel(db: Session, file_path: str) -> dict:
+def import_excel(db: Session, file_path: str, workspace_id: int | None = None, operator_name: str = "excel") -> dict:
     workbook = load_workbook(file_path)
     sheet = workbook.active
     rows = list(sheet.iter_rows(values_only=True))
@@ -76,6 +76,7 @@ def import_excel(db: Session, file_path: str) -> dict:
         existing = (
             db.query(Product)
             .filter(Product.style_no == style_no, Product.product_no == product_no)
+            .filter(Product.workspace_id == workspace_id)
             .first()
         )
         if existing:
@@ -92,8 +93,9 @@ def import_excel(db: Session, file_path: str) -> dict:
                 season=_value(row, mapping, "season"),
                 scene=_value(row, mapping, "scene"),
                 fba=_value(row, mapping, "fba"),
-                created_by="excel",
-                updated_by="excel",
+                workspace_id=workspace_id,
+                created_by=operator_name,
+                updated_by=operator_name,
             )
             db.add(product)
             db.flush()
