@@ -44,11 +44,22 @@ function formatApiError(detail: string, status: number): string {
   }
 }
 
+function formatNetworkError(path: string, error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error);
+  const target = `${API_BASE}${path}`;
+  return `无法连接后端接口：${target}。请确认当前访问域名下的 /api 可达；云端部署请检查网关/Nginx 是否转发 /api、后端容器是否健康，以及跨域配置是否包含当前前端域名。原始错误：${detail}`;
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    headers: options.body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
-    ...options,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      headers: options.body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
+      ...options,
+    });
+  } catch (error) {
+    throw new Error(formatNetworkError(path, error));
+  }
   if (!response.ok) {
     const detail = await response.text();
     throw new Error(formatApiError(detail, response.status));

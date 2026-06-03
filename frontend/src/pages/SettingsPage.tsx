@@ -25,6 +25,10 @@ const emptyDraft: LlmConfigPayload = {
   updated_by: '运营',
 };
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function SettingsPage() {
   const [status, setStatus] = useState<Record<string, unknown>>({});
   const [configs, setConfigs] = useState<LlmConfig[]>([]);
@@ -40,12 +44,20 @@ export function SettingsPage() {
     : '未保存';
 
   const load = async () => {
-    const [nextStatus, nextConfigs] = await Promise.all([api.llmStatus(), api.llmConfigs()]);
-    setStatus(nextStatus);
-    setConfigs(nextConfigs);
+    try {
+      const [nextStatus, nextConfigs] = await Promise.all([api.llmStatus(), api.llmConfigs()]);
+      setStatus(nextStatus);
+      setConfigs(nextConfigs);
+      setMessage('');
+    } catch (error) {
+      setStatus({});
+      setConfigs([]);
+      setMessage(getErrorMessage(error));
+      throw error;
+    }
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load().catch(() => undefined); }, []);
 
   const chooseProvider = (provider: string) => {
     const preset = providerPresets.find((item) => item.provider === provider);
@@ -100,7 +112,7 @@ export function SettingsPage() {
       setMessage('模型配置已保存到数据库');
       if (!editingId) setDraft({ ...draft, api_key: '' });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
+      setMessage(getErrorMessage(error));
     } finally {
       setBusy(false);
     }
@@ -114,11 +126,14 @@ export function SettingsPage() {
       await load();
       setMessage('已切换启用模型配置');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
+      setMessage(getErrorMessage(error));
     } finally {
       setBusy(false);
     }
   };
+
+  const isErrorMessage =
+    message.includes('失败') || message.includes('HTTP') || message.includes('Failed to fetch') || message.includes('无法连接后端');
 
   return (
     <main className="page ai-page">
@@ -155,7 +170,7 @@ export function SettingsPage() {
         </div>
       </section>
 
-      {message && <p className={message.includes('失败') || message.includes('HTTP') ? 'notice error' : 'notice'}>{message}</p>}
+      {message && <p className={isErrorMessage ? 'notice error' : 'notice'}>{message}</p>}
 
       <section className="llm-config-layout">
         <div className="panel llm-config-form">
