@@ -1,4 +1,4 @@
-import { BadgeCheck, Save, Workflow } from 'lucide-react';
+import { BadgeCheck, FileClock, Save, Workflow } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { CopyEditor } from '../components/CopyEditor';
@@ -13,6 +13,7 @@ export function ProductDetailPage({ id }: { id: number }) {
   const [versions, setVersions] = useState<CopyVersion[]>([]);
   const [hotSearchConfig, setHotSearchConfig] = useState<HotSearchConfig | null>(null);
   const [message, setMessage] = useState('');
+  const [activeBatchNo, setActiveBatchNo] = useState('');
 
   const load = async () => {
     const [next, config] = await Promise.all([
@@ -25,6 +26,22 @@ export function ProductDetailPage({ id }: { id: number }) {
     setVersions(await api.versions(id));
   };
   useEffect(() => { void load(); }, [id]);
+  useEffect(() => {
+    if (!activeBatchNo) return undefined;
+    const timer = window.setInterval(async () => {
+      try {
+        const detail = await api.copyBatch(activeBatchNo);
+        if (['completed', 'completed_with_errors', 'canceled'].includes(detail.batch.status)) {
+          await load();
+          setMessage(`生成任务 ${activeBatchNo} 已${detail.batch.success_count ? '完成' : '结束'}。`);
+          setActiveBatchNo('');
+        }
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : String(error));
+      }
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [activeBatchNo, id]);
 
   if (!product) return <main className="page"><p>加载中...</p></main>;
 
@@ -69,6 +86,13 @@ export function ProductDetailPage({ id }: { id: number }) {
         </div>
       </div>
       {message && <p className="notice">{message}</p>}
+      {activeBatchNo && (
+        <p className="notice task-job-notice">
+          <FileClock size={16} />后台生成任务已创建：
+          <a href={`#/copy-batches/${activeBatchNo}`}>{activeBatchNo}</a>
+          。可以离开页面，任务会继续执行。
+        </p>
+      )}
       <section className="panel">
         <ProductForm value={product} onChange={setProduct} />
       </section>
@@ -76,7 +100,14 @@ export function ProductDetailPage({ id }: { id: number }) {
       <CopyEditor
         copy={product.copy_output}
         hotSearchConfig={hotSearchConfig}
-        onGenerate={async (useHotSearch) => refreshCopy(await api.generateCopy(id, useHotSearch))}
+        activeBatchNo={activeBatchNo}
+        onGenerate={async (useHotSearch) => {
+          const batch = await api.generateCopyJob(id, useHotSearch);
+          setActiveBatchNo(batch.batch_no);
+          setMessage(`已加入后台生成队列：${batch.batch_no}`);
+          await load();
+          return batch;
+        }}
         onRewrite={async (instruction) => refreshCopy(await api.rewriteCopy(id, instruction, product.updated_by || '运营'))}
         onSave={async (payload) => {
           await refreshCopy(await api.saveCopy(id, payload));

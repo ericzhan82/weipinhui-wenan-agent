@@ -6,6 +6,7 @@ from app.auth import AuthContext, get_workspace_context, require_workspace_write
 from app.db import get_db
 from app.models import Product, ProductSku
 from app.schemas import ProductCreate, ProductRead, ProductUpdate
+from app.services.copy_batch_service import product_context_ready, product_has_copy
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -16,6 +17,8 @@ def list_products(
     status: str | None = None,
     gender: str | None = None,
     season: str | None = None,
+    context_status: str | None = None,
+    copy_state: str | None = None,
     context: AuthContext = Depends(get_workspace_context),
     db: Session = Depends(get_db),
 ):
@@ -37,13 +40,24 @@ def list_products(
         query = query.filter(Product.gender == gender)
     if season:
         query = query.filter(Product.season == season)
-    return query.order_by(Product.updated_at.desc()).all()
+    products = query.order_by(Product.updated_at.desc()).all()
+    if context_status == "ready":
+        products = [product for product in products if product_context_ready(product)]
+    elif context_status == "missing":
+        products = [product for product in products if not product_context_ready(product)]
+    if copy_state == "generated":
+        products = [product for product in products if product_has_copy(product)]
+    elif copy_state == "not_generated":
+        products = [product for product in products if not product_has_copy(product)]
+    return products
 
 
 @router.post("", response_model=ProductRead)
 def create_product(payload: ProductCreate, context: AuthContext = Depends(require_workspace_write), db: Session = Depends(get_db)):
     data = payload.model_dump(exclude={"skus"})
     product = Product(**data, workspace_id=context.workspace_id)
+    if product_context_ready(product):
+        product.status = "ready"
     db.add(product)
     db.flush()
     for sku in payload.skus:

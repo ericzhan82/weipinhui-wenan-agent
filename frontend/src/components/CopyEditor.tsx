@@ -17,7 +17,7 @@ import {
   Wand2,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import type { CopyOutput, HotSearchConfig, ValidationResult } from '../types';
+import type { CopyBatch, CopyOutput, HotSearchConfig, ValidationResult } from '../types';
 import { ValidationPanel } from './ValidationPanel';
 
 const generationSteps = [
@@ -43,13 +43,14 @@ type HotSearchMode = 'global' | 'on' | 'off';
 type Props = {
   copy?: CopyOutput | null;
   hotSearchConfig?: HotSearchConfig | null;
-  onGenerate: (useHotSearch?: boolean) => Promise<CopyOutput | void>;
+  activeBatchNo?: string;
+  onGenerate: (useHotSearch?: boolean) => Promise<CopyOutput | CopyBatch | void>;
   onRewrite: (instruction: string) => Promise<CopyOutput | void>;
   onSave: (payload: { title: string; main_image_tags: string[]; color_copy: string; operator_name: string; change_reason: string }) => Promise<void>;
   onValidate: (payload: Partial<CopyOutput> & { operator_name: string }) => Promise<ValidationResult>;
 };
 
-export function CopyEditor({ copy, hotSearchConfig, onGenerate, onRewrite, onSave, onValidate }: Props) {
+export function CopyEditor({ copy, hotSearchConfig, activeBatchNo, onGenerate, onRewrite, onSave, onValidate }: Props) {
   const [title, setTitle] = useState('');
   const [tags, setTags] = useState(['', '', '']);
   const [colorCopy, setColorCopy] = useState('');
@@ -89,6 +90,13 @@ export function CopyEditor({ copy, hotSearchConfig, onGenerate, onRewrite, onSav
     }
   }, [copy, processStatus]);
 
+  useEffect(() => {
+    if (!activeBatchNo) return;
+    setProcessStatus('running');
+    setProcessStartedAt((current) => current || Date.now());
+    setActiveStep((current) => Math.max(current, 3));
+  }, [activeBatchNo]);
+
   const payload = {
     title,
     main_image_tags: tags.map((tag) => tag.trim()).filter(Boolean),
@@ -116,7 +124,7 @@ export function CopyEditor({ copy, hotSearchConfig, onGenerate, onRewrite, onSav
       ? Math.min(92, 8 + (activeStep / (generationSteps.length - 1)) * 84)
       : 0;
 
-  const runAction = async (actionName: BusyAction, action: () => Promise<void>) => {
+  const runAction = async (actionName: BusyAction, action: () => Promise<unknown>) => {
     setError('');
     setBusyAction(actionName);
     let actionStartedAt: number | null = null;
@@ -129,8 +137,13 @@ export function CopyEditor({ copy, hotSearchConfig, onGenerate, onRewrite, onSav
       setActiveStep(0);
     }
     try {
-      await action();
+      const result = await action();
       if (actionName === 'generate') {
+        if (result && typeof result === 'object' && 'batch_no' in result) {
+          setActiveStep(3);
+          setProcessStatus('running');
+          return;
+        }
         const duration = actionStartedAt ? Math.max(1, Math.ceil((Date.now() - actionStartedAt) / 1000)) : elapsedSeconds;
         setLastDuration(duration);
         setElapsedSeconds(duration);
@@ -156,7 +169,7 @@ export function CopyEditor({ copy, hotSearchConfig, onGenerate, onRewrite, onSav
           <p className="muted">把商品资料交给模型生成首版文案，再由运营按意图接管和定稿。</p>
         </div>
         <div className="toolbar">
-          <button className="primary" title="生成文案" disabled={Boolean(busyAction)} onClick={() => runAction('generate', async () => { await onGenerate(hotSearchOverride); })}>
+          <button className="primary" title="生成文案" disabled={Boolean(busyAction)} onClick={() => runAction('generate', async () => onGenerate(hotSearchOverride))}>
             <Sparkles size={16} />{busyAction === 'generate' ? '生成中' : '启动生成'}
           </button>
           <button title="重写文案" disabled={Boolean(busyAction)} onClick={() => runAction('rewrite', async () => { await onRewrite(instruction); })}>
@@ -250,7 +263,7 @@ export function CopyEditor({ copy, hotSearchConfig, onGenerate, onRewrite, onSav
           <div>
             <h3><BrainCircuit size={18} />AI 生成过程</h3>
             <p>
-              {processStatus === 'running' && `运行中 · ${elapsedSeconds}s`}
+              {processStatus === 'running' && (activeBatchNo ? `后台任务 ${activeBatchNo} 生成中 · ${elapsedSeconds}s` : `运行中 · ${elapsedSeconds}s`)}
               {processStatus === 'done' && `已完成${lastDuration ? ` · ${lastDuration}s` : ''}`}
               {processStatus === 'error' && '生成中断'}
               {processStatus === 'idle' && '待启动'}

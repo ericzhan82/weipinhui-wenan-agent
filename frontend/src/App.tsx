@@ -108,7 +108,7 @@ export function App() {
     setSelectedWorkspaceId(nextWorkspaceId);
     setWorkspaceId(nextWorkspaceId);
     void loadSession();
-    if (window.location.hash === '#/settings' && !user?.is_system_admin) window.location.hash = '#/products';
+    if (window.location.hash !== '#/products') window.location.hash = '#/products';
   };
 
   const logout = async () => {
@@ -150,7 +150,7 @@ export function App() {
 
   const productMatch = route.match(/^#\/products\/(\d+)/);
   const batchMatch = route.match(/^#\/copy-batches\/(.+)/);
-  let page = <ProductListPage />;
+  let page = <ProductListPage workspaceId={workspaceId} />;
   if (route === '#/products/new') page = <ProductCreatePage />;
   else if (productMatch) page = <ProductDetailPage id={Number(productMatch[1])} />;
   else if (route.startsWith('#/copy-batches')) page = <CopyBatchPage batchNo={batchMatch ? decodeURIComponent(batchMatch[1]) : undefined} />;

@@ -22,6 +22,16 @@ import type {
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const TOKEN_KEY = 'vipshop_copy_access_token';
 const WORKSPACE_KEY = 'vipshop_copy_workspace_id';
+const REQUEST_TIMEOUT_MS = 15000;
+
+export type ProductFilters = {
+  keyword?: string;
+  status?: string;
+  gender?: string;
+  season?: string;
+  context_status?: string;
+  copy_state?: string;
+};
 
 export function getAuthToken() {
   return localStorage.getItem(TOKEN_KEY) || '';
@@ -82,7 +92,16 @@ function formatNetworkError(path: string, error: unknown): string {
   return `无法连接后端接口：${target}。请确认当前访问域名下的 /api 可达；云端部署请检查网关/Nginx 是否转发 /api、后端容器是否健康，以及跨域配置是否包含当前前端域名。原始错误：${detail}`;
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+function queryString(params: Record<string, string | undefined | null>) {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) search.set(key, value);
+  });
+  const text = search.toString();
+  return text ? `?${text}` : '';
+}
+
+async function request<T>(path: string, options: RequestInit = {}, retryCount = 0): Promise<T> {
   let response: Response;
   const headers: Record<string, string> = {};
   if (!(options.body instanceof FormData)) headers['Content-Type'] = 'application/json';
@@ -90,13 +109,22 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (token) headers.Authorization = `Bearer ${token}`;
   const workspaceId = getWorkspaceId();
   if (workspaceId) headers['X-Workspace-Id'] = String(workspaceId);
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     response = await fetch(`${API_BASE}${path}`, {
       ...options,
       headers: { ...headers, ...(options.headers as Record<string, string> | undefined) },
+      signal: options.signal || controller.signal,
     });
   } catch (error) {
+    if ((options.method || 'GET').toUpperCase() === 'GET' && retryCount < 1) {
+      window.clearTimeout(timeout);
+      return request<T>(path, options, retryCount + 1);
+    }
     throw new Error(formatNetworkError(path, error));
+  } finally {
+    window.clearTimeout(timeout);
   }
   if (!response.ok) {
     const detail = await response.text();
@@ -123,7 +151,10 @@ export const api = {
     request<WorkspaceMember>(`/workspaces/${workspaceId}/members/${userId}`, { method: 'PUT', body: JSON.stringify(payload) }),
   deleteMember: (workspaceId: number, userId: number) =>
     request<{ deleted: boolean }>(`/workspaces/${workspaceId}/members/${userId}`, { method: 'DELETE' }),
-  products: (keyword = '') => request<Product[]>(`/products${keyword ? `?keyword=${encodeURIComponent(keyword)}` : ''}`),
+  products: (filters: ProductFilters | string = '') => {
+    const params = typeof filters === 'string' ? { keyword: filters } : filters;
+    return request<Product[]>(`/products${queryString(params)}`);
+  },
   product: (id: number) => request<Product>(`/products/${id}`),
   createProduct: (payload: Product) => request<Product>('/products', { method: 'POST', body: JSON.stringify(payload) }),
   updateProduct: (id: number, payload: Partial<Product>) =>
@@ -135,6 +166,11 @@ export const api = {
   deleteSku: (id: number) => request<{ deleted: boolean }>(`/skus/${id}`, { method: 'DELETE' }),
   generateCopy: (productId: number, use_hot_search?: boolean) =>
     request<CopyOutput & { warnings: unknown[] }>(`/products/${productId}/generate-copy`, {
+      method: 'POST',
+      ...(use_hot_search === undefined ? {} : { body: JSON.stringify({ use_hot_search }) }),
+    }),
+  generateCopyJob: (productId: number, use_hot_search?: boolean) =>
+    request<CopyBatch>(`/products/${productId}/generate-copy-job`, {
       method: 'POST',
       ...(use_hot_search === undefined ? {} : { body: JSON.stringify({ use_hot_search }) }),
     }),
@@ -186,7 +222,7 @@ export const api = {
     return request<Record<string, unknown>>('/excel/import', { method: 'POST', body: data });
   },
   exportExcel: (keyword = '') => request<{ export_id: string; download_url: string }>(`/excel/export${keyword ? `?keyword=${encodeURIComponent(keyword)}` : ''}`),
-  createCopyBatch: (payload: { keyword?: string; status?: string; gender?: string; season?: string; overwrite_existing?: boolean; use_hot_search?: boolean | null }) =>
+  createCopyBatch: (payload: ProductFilters & { overwrite_existing?: boolean; use_hot_search?: boolean | null }) =>
     request<CopyBatch>('/copy-batches', { method: 'POST', body: JSON.stringify(payload) }),
   copyBatches: () => request<CopyBatch[]>('/copy-batches'),
   copyBatch: (batchNo: string) => request<CopyBatchDetail>(`/copy-batches/${encodeURIComponent(batchNo)}`),

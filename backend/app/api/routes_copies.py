@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 from app.auth import AuthContext, get_workspace_context, require_workspace_write
 from app.db import get_db
 from app.models import CopyOutput, CopyVersion, Product
-from app.schemas import CopyGenerateRequest, CopyRead, CopySaveRequest, RewriteCopyRequest, ValidateCopyRequest
+from app.schemas import CopyBatchRead, CopyGenerateRequest, CopyRead, CopySaveRequest, RewriteCopyRequest, ValidateCopyRequest
+from app.services.copy_batch_service import create_single_product_batch
 from app.services.copy_generator import (
     generate_copy_for_product,
     rewrite_copy_for_product,
@@ -27,6 +28,20 @@ def generate_copy(product_id: int, payload: CopyGenerateRequest | None = None, c
         raise HTTPException(400, detail=exc.args[0]) from exc
     except RuntimeError as exc:
         raise HTTPException(502, detail=str(exc)) from exc
+
+
+@router.post("/{product_id}/generate-copy-job", response_model=CopyBatchRead)
+def generate_copy_job(product_id: int, payload: CopyGenerateRequest | None = None, context: AuthContext = Depends(require_workspace_write), db: Session = Depends(get_db)):
+    try:
+        return create_single_product_batch(
+            db,
+            context.workspace_id,
+            product_id,
+            context.operator_name,
+            use_hot_search=payload.use_hot_search if payload else None,
+        )
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc)) from exc
 
 
 @router.post("/{product_id}/rewrite-copy")

@@ -16,6 +16,7 @@
 - AI 文案任务队列、模型上下文录入、搜索、详情、删除。
 - 内置账号登录、角色权限、工作空间隔离。
 - 批量生成任务号、后台队列生成、按任务号导出成功结果。
+- 独立 worker 消费生成队列，单品生成和批量生成均可刷新后恢复状态。
 - SKC/颜色素材新增、编辑、删除。
 - mock 模式文案生成；数据库模型配置优先调用外部模型。
 - 文案在线编辑、保存、重写、校验。
@@ -45,6 +46,8 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
+Compose 会启动 `postgres`、`backend`、`worker`、`frontend` 四个服务；文案生成由独立 `worker` 消费数据库队列，刷新页面、切换页面或 Web 容器重启都不会丢失正在排队的生成任务。
+
 首次部署必须在 `.env` 中修改：
 
 ```env
@@ -56,6 +59,7 @@ COPY_BATCH_WORKER_CONCURRENCY=1
 ```
 
 约 3GB 云服务器建议保持 `COPY_BATCH_WORKER_CONCURRENCY=1`；需要更快时最多调到 `2`，避免多个大模型请求同时占满内存。
+Web 接口并发由 `WEB_CONCURRENCY` 控制，默认 `2`；内存紧张时优先降到 `1`。
 
 访问：
 
@@ -76,6 +80,8 @@ http://localhost/api/llm/status
 docker compose down
 ```
 
+云端重部署请使用 `docker compose up -d --build`。不要执行 `docker compose down -v`，也不要删除 `data/` 或 `storage/`，否则会清空数据库、上传文件和导出文件。
+
 Windows 本地一键验收脚本：
 
 ```powershell
@@ -95,6 +101,18 @@ Linux/Hermes 服务器可运行：
 ```bash
 bash scripts/verify_docker.sh
 ```
+
+完整本地验收会额外运行 Docker、接口冒烟、并发和性能测试：
+
+```powershell
+.\scripts\test_all.ps1
+```
+
+```bash
+bash scripts/test_all.sh
+```
+
+`test_all` 只建议在本地或测试服务器运行；它会创建 mock 验收数据和性能测试任务，结束时不会删除 Docker volume。
 
 ## 本地开发启动
 
@@ -188,6 +206,8 @@ mock 模式不调用外部服务，会根据 FBA、品类、季节、场景生�
 - R 列：颜色词文案
 
 批量生成导出请在 `/copy-batches` 按任务号导出，只包含该批次成功生成的商品，不会混入历史已生成结果。
+
+单品详情页点击生成也会创建后台任务号；刷新或离开页面后，任务继续由 worker 执行，可在批量任务页按任务号查看。
 
 ## 文案学习闭环说明
 

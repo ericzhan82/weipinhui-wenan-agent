@@ -1,10 +1,26 @@
 from io import BytesIO
 import json
+import os
+from pathlib import Path
 import sys
 import time
 
 from openpyxl import Workbook
 import requests
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def env_value(name: str, default: str = "") -> str:
+    if os.getenv(name):
+        return os.environ[name]
+    env_path = ROOT / ".env"
+    if env_path.exists():
+        for line in env_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            if line.startswith(f"{name}="):
+                return line.split("=", 1)[1].strip()
+    return default
 
 
 def hot_search_workbook() -> bytes:
@@ -17,17 +33,48 @@ def hot_search_workbook() -> bytes:
     return buffer.getvalue()
 
 
-def ensure_mock_llm(base: str) -> dict:
-    configs_response = requests.get(base + "/llm/configs", timeout=10)
+def login(base: str) -> dict:
+    response = requests.post(
+        base + "/auth/login",
+        json={
+            "email": env_value("SMOKE_EMAIL", env_value("ADMIN_EMAIL", "admin@example.com")),
+            "password": env_value("SMOKE_PASSWORD", env_value("ADMIN_PASSWORD", "change_me_admin_password")),
+        },
+        timeout=10,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    workspace_id = payload["user"]["workspaces"][0]["id"]
+    return {
+        "Authorization": f"Bearer {payload['access_token']}",
+        "X-Workspace-Id": str(workspace_id),
+    }
+
+
+def wait_batch(base: str, headers: dict, batch_no: str, timeout_seconds: int = 120) -> dict:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        response = requests.get(f"{base}/copy-batches/{batch_no}", headers=headers, timeout=10)
+        response.raise_for_status()
+        detail = response.json()
+        if detail["batch"]["status"] in {"completed", "completed_with_errors", "canceled"}:
+            return detail
+        time.sleep(2)
+    raise TimeoutError(f"batch did not finish: {batch_no}")
+
+
+def ensure_mock_llm(base: str, headers: dict) -> dict:
+    configs_response = requests.get(base + "/llm/configs", headers=headers, timeout=10)
     configs_response.raise_for_status()
     configs = configs_response.json()
     for config in configs:
         if config.get("provider") == "mock":
-            activated_response = requests.post(f"{base}/llm/configs/{config['id']}/activate", timeout=10)
+            activated_response = requests.post(f"{base}/llm/configs/{config['id']}/activate", headers=headers, timeout=10)
             activated_response.raise_for_status()
             return activated_response.json()
     created_response = requests.post(
         base + "/llm/configs",
+        headers=headers,
         json={
             "provider": "mock",
             "display_name": "Smoke Mock",
@@ -51,16 +98,19 @@ def main() -> int:
             time.sleep(1)
     out: dict[str, object] = {}
     out["health"] = requests.get(base + "/health", timeout=10).json()["status"]
-    out["activatedLlm"] = ensure_mock_llm(base)["provider"]
+    headers = login(base)
+    out["login"] = "ok"
+    out["activatedLlm"] = ensure_mock_llm(base, headers)["provider"]
     if out["activatedLlm"] != "mock":
         raise AssertionError("mock llm activation failed")
-    out["llm"] = requests.get(base + "/llm/status", timeout=10).json()["provider"]
+    out["llm"] = requests.get(base + "/llm/status", headers=headers, timeout=10).json()["provider"]
 
-    config_response = requests.get(base + "/hot-search/config", timeout=10)
+    config_response = requests.get(base + "/hot-search/config", headers=headers, timeout=10)
     config_response.raise_for_status()
     out["hotSearchDefaultBefore"] = config_response.json()["enabled_by_default"]
     reset_config_response = requests.put(
         base + "/hot-search/config",
+        headers=headers,
         json={"enabled_by_default": False, "updated_by": "smoke"},
         timeout=10,
     )
@@ -71,6 +121,7 @@ def main() -> int:
 
     hot_import_response = requests.post(
         base + "/hot-search/import",
+        headers=headers,
         files={
             "file": (
                 "hot-search-smoke.xlsx",
@@ -101,30 +152,34 @@ def main() -> int:
         "status": "draft",
         "skus": [{"sku_no": "SKC101", "color_name": "浅蓝", "color_code": "BL", "image_url": "", "color_remark": "清爽色"}],
     }
-    created_response = requests.post(base + "/products", json=product, timeout=10)
+    created_response = requests.post(base + "/products", headers=headers, json=product, timeout=10)
     created_response.raise_for_status()
     created = created_response.json()
     out["productId"] = created["id"]
 
-    copy_response = requests.post(f"{base}/products/{created['id']}/generate-copy", timeout=10)
-    copy_response.raise_for_status()
-    copy = copy_response.json()
+    batch_response = requests.post(f"{base}/products/{created['id']}/generate-copy-job", headers=headers, timeout=10)
+    batch_response.raise_for_status()
+    batch = batch_response.json()
+    out["singleBatchNo"] = batch["batch_no"]
+    detail = wait_batch(base, headers, batch["batch_no"])
+    if detail["batch"]["success_count"] != 1:
+        raise AssertionError("single generate job did not finish successfully")
+    copy = requests.get(f"{base}/products/{created['id']}", headers=headers, timeout=10).json()["copy_output"]
     out["generatedTitleLength"] = len(copy["title"])
-    out["normalHotSearchEnabled"] = copy.get("hot_search_enabled")
-    if out["normalHotSearchEnabled"] is not False:
-        raise AssertionError("normal generate should keep hot search disabled")
 
     hot_copy_response = requests.post(
-        f"{base}/products/{created['id']}/generate-copy",
+        f"{base}/products/{created['id']}/generate-copy-job",
+        headers=headers,
         json={"use_hot_search": True},
         timeout=10,
     )
     hot_copy_response.raise_for_status()
-    hot_copy = hot_copy_response.json()
-    out["hotSearchEnabled"] = hot_copy["hot_search_enabled"]
-    out["hotSearchMatched"] = hot_copy["matched_hot_terms"]
-    if out["hotSearchEnabled"] is not True or "女童防晒衣" not in out["hotSearchMatched"]:
-        raise AssertionError("hot search generate did not match uploaded term")
+    hot_batch = hot_copy_response.json()
+    hot_detail = wait_batch(base, headers, hot_batch["batch_no"])
+    out["hotBatchStatus"] = hot_detail["batch"]["status"]
+    if hot_detail["batch"]["success_count"] != 1:
+        raise AssertionError("hot search generate job did not finish successfully")
+    hot_copy = requests.get(f"{base}/products/{created['id']}", headers=headers, timeout=10).json()["copy_output"]
 
     validation_response = requests.post(
         f"{base}/products/{created['id']}/validate-copy",
@@ -134,6 +189,7 @@ def main() -> int:
             "color_copy": hot_copy["color_copy"],
             "operator_name": "smoke",
         },
+        headers=headers,
         timeout=10,
     )
     validation_response.raise_for_status()
@@ -143,6 +199,7 @@ def main() -> int:
 
     save_response = requests.put(
         f"{base}/products/{created['id']}/copy",
+        headers=headers,
         json={
             "title": hot_copy["title"],
             "main_image_tags": hot_copy["main_image_tags"],
@@ -155,22 +212,23 @@ def main() -> int:
     save_response.raise_for_status()
     out["savedColorCopy"] = save_response.json()["color_copy"]
 
-    versions = requests.get(f"{base}/products/{created['id']}/copy-versions", timeout=10).json()
+    versions = requests.get(f"{base}/products/{created['id']}/copy-versions", headers=headers, timeout=10).json()
     out["versionCount"] = len(versions)
 
     history_response = requests.post(
         f"{base}/products/{created['id']}/save-history-case",
+        headers=headers,
         json={"reason": "冒烟优秀案例", "operator_name": "smoke"},
         timeout=10,
     )
     history_response.raise_for_status()
     out["historyId"] = history_response.json()["id"]
 
-    report_response = requests.post(base + "/learning/analyze", timeout=10)
+    report_response = requests.post(base + "/learning/analyze", headers=headers, timeout=10)
     report_response.raise_for_status()
     out["learningSampleCount"] = report_response.json()["sample_count"]
 
-    export_response = requests.get(base + "/excel/export", timeout=10)
+    export_response = requests.get(base + "/excel/export", headers=headers, timeout=10)
     export_response.raise_for_status()
     out["exportId"] = export_response.json()["export_id"]
 

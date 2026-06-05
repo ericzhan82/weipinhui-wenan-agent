@@ -10,20 +10,24 @@
 4. 修改 `POSTGRES_PASSWORD` 为强密码。
 5. 配置 `AUTH_SECRET`、`ADMIN_EMAIL`、`ADMIN_PASSWORD`。
 6. 约 3GB 云服务器建议保持 `COPY_BATCH_WORKER_CONCURRENCY=1`，最多调到 `2`。
-7. 配置 `LLM_PROVIDER`：
+7. Web 接口并发默认 `WEB_CONCURRENCY=2`、`WEB_TIMEOUT=120`；内存紧张时先把 `WEB_CONCURRENCY` 降到 `1`。
+8. 配置 `LLM_PROVIDER`：
    - 测试可用 `mock`；
    - 真实生成用 `openai_compatible`。
-8. 如果使用真实模型，配置 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL`。
-9. 确认 Docker 和 Docker Compose 可用。
-10. 确认 `data/` 和 `storage/` 目录存在。
-11. 执行 `docker compose up -d --build`。
-12. 检查后端健康接口 `/api/health`。
-13. 检查前端页面是否可访问并使用管理员账号登录。
-14. 检查 `/api/llm/status`。
-15. 如果服务失败，查看 `docker compose logs` 并修复。
-16. 不要删除 `data/` 和 `storage/` 中已有数据。
-17. 不要把 `.env` 或 API Key 提交到 GitHub。
-18. 如果服务暴露公网，必须先配置 HTTPS。
+9. 如果使用真实模型，配置 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL`。
+10. 确认 Docker 和 Docker Compose 可用。
+11. 确认 `data/` 和 `storage/` 目录存在。
+12. 执行 `docker compose up -d --build`。
+13. 检查 `postgres`、`backend`、`worker`、`frontend` 四个服务都在运行。
+14. 检查后端健康接口 `/api/health`。
+15. 检查前端页面是否可访问并使用管理员账号登录。
+16. 检查 `/api/llm/status`。
+17. 如果服务失败，查看 `docker compose logs` 并修复。
+18. 不要删除 `data/` 和 `storage/` 中已有数据。
+19. 不要把 `.env` 或 API Key 提交到 GitHub。
+20. 如果服务暴露公网，必须先配置 HTTPS。
+
+当前版本把 Web 接口和文案生成队列拆成两个容器：`backend` 只负责 API，`worker` 负责消费单品和批量生成任务。页面刷新、退出详情页或 backend 容器重启时，任务状态仍以数据库为准。
 
 ## 建议目录
 
@@ -37,6 +41,8 @@
 
 ## 部署命令模板
 
+首次部署：
+
 ```bash
 cd /opt/vipshop-kidswear-copy-agent-system
 git clone <仓库地址> repo
@@ -48,6 +54,27 @@ docker compose ps
 curl http://127.0.0.1:${BACKEND_PORT:-8000}/api/health
 curl http://127.0.0.1:${BACKEND_PORT:-8000}/api/llm/status
 ```
+
+已有云端实例重新部署：
+
+```bash
+cd /opt/vipshop-kidswear-copy-agent-system/repo
+git fetch origin
+git pull --ff-only origin main
+docker compose up -d --build
+docker compose ps
+docker compose logs --tail=100 backend worker
+```
+
+重新部署时不要执行以下命令：
+
+```bash
+docker compose down -v
+docker volume prune
+rm -rf data storage
+```
+
+这些命令会删除数据库 volume、上传文件或导出文件。常规升级只需要 `git pull` 后执行 `docker compose up -d --build`，不会清空已有业务数据。
 
 Windows 服务器或本地验收也可以运行：
 

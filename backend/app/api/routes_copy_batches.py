@@ -23,7 +23,7 @@ def create_batch(
     context: AuthContext = Depends(require_workspace_write),
     db: Session = Depends(get_db),
 ):
-    filters = payload.model_dump(include={"keyword", "status", "gender", "season"}, exclude_none=True)
+    filters = payload.model_dump(include={"keyword", "status", "gender", "season", "context_status", "copy_state"}, exclude_none=True)
     return create_copy_batch(
         db,
         context.workspace_id,

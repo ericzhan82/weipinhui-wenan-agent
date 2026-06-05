@@ -193,6 +193,8 @@ class CopyBatchCreate(BaseModel):
     status: str | None = None
     gender: str | None = None
     season: str | None = None
+    context_status: str | None = None
+    copy_state: str | None = None
     overwrite_existing: bool = False
     use_hot_search: bool | None = None
 
@@ -286,6 +288,7 @@ class ImportResult(BaseModel):
     success_count: int
     failed_rows: list[dict[str, Any]]
     skipped_count: int = 0
+    updated_count: int = 0
 
 
 class ExportResult(BaseModel):

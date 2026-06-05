@@ -12,6 +12,7 @@ IGNORED_PARTS = {
     "node_modules",
     "dist",
     "data",
+    "storage",
 }
 
 REQUIRED_FILES = [
@@ -23,10 +24,15 @@ REQUIRED_FILES = [
     "docker-compose.yml",
     "scripts/verify_docker.ps1",
     "scripts/verify_docker.sh",
+    "scripts/test_all.ps1",
+    "scripts/test_all.sh",
+    "scripts/perf_concurrency.py",
     "backend/Dockerfile",
     "backend/.dockerignore",
     "backend/requirements.txt",
     "backend/main.py",
+    "backend/worker.py",
+    "backend/app/runtime.py",
     "backend/app/db.py",
     "backend/app/models.py",
     "backend/app/schemas.py",
@@ -41,6 +47,7 @@ REQUIRED_FILES = [
     "backend/app/api/routes_learning.py",
     "backend/app/api/routes_llm.py",
     "backend/app/services/copy_generator.py",
+    "backend/app/services/copy_batch_service.py",
     "backend/app/services/copy_validator.py",
     "backend/app/services/excel_importer.py",
     "backend/app/services/excel_exporter.py",
@@ -64,9 +71,11 @@ REQUIRED_FILES = [
 def is_ignored(path: Path) -> bool:
     relative = path.relative_to(ROOT)
     relative_text = relative.as_posix()
+    if relative_text in TRACKED_FILES:
+        return False
     if any(part in IGNORED_PARTS for part in relative.parts):
         return True
-    if relative_text not in TRACKED_FILES and is_git_ignored(relative_text):
+    if is_git_ignored(relative_text):
         return True
     return False
 
@@ -107,15 +116,15 @@ def main() -> int:
             failures.append(f"missing required file: {item}")
 
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
-    for service in ("postgres:", "backend:", "frontend:"):
+    for service in ("postgres:", "backend:", "worker:", "frontend:"):
         if service not in compose:
             failures.append(f"docker-compose.yml missing service marker: {service}")
-    for marker in ("postgres:16", "condition: service_healthy", "/api/health"):
+    for marker in ("postgres:16", "condition: service_healthy", "/api/health", "worker.py", "vipshop-copy-worker"):
         if marker not in compose:
             failures.append(f"docker-compose.yml missing deployment marker: {marker}")
 
     env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
-    for marker in ("LLM_PROVIDER=mock", "LLM_API_KEY=", "POSTGRES_PASSWORD=change_me_strong_password"):
+    for marker in ("LLM_PROVIDER=mock", "LLM_API_KEY=", "POSTGRES_PASSWORD=change_me_strong_password", "WEB_CONCURRENCY=2", "WEB_TIMEOUT=120", "COPY_BATCH_WORKER_CONCURRENCY=1"):
         if marker not in env_example:
             failures.append(f".env.example missing marker: {marker}")
 

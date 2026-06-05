@@ -1,16 +1,19 @@
 :root {
   color-scheme: light;
   font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
-  color: #1b242c;
-  background: #f6f7f8;
-  --ink: #15191d;
-  --muted: #64707d;
-  --line: #d9dee4;
+  color: #18201d;
+  background: #f6f7f5;
+  --ink: #18201d;
+  --muted: #64726c;
+  --line: #dce4df;
   --panel: #ffffff;
   --accent: #087f74;
   --accent-dark: #06665e;
-  --danger: #b42318;
-  --ok: #15803d;
+  --brand-deep: #12312b;
+  --brand-soft: #edf6f3;
+  --danger: #c84630;
+  --blue: #2f6fed;
+  --ok: #16845b;
 }
 
 * { box-sizing: border-box; }
@@ -38,7 +41,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 
 .app-shell { display: grid; grid-template-columns: 236px 1fr; min-height: 100vh; }
 .sidebar {
-  background: #151b20;
+  background: var(--brand-deep);
   color: #f8fafc;
   padding: 22px 16px;
   position: sticky;
@@ -55,10 +58,10 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   gap: 10px;
   padding: 10px 12px;
 }
-.sidebar nav a.active, .sidebar nav a:hover { background: #26323a; color: #fff; }
+.sidebar nav a.active, .sidebar nav a:hover { background: rgba(255, 255, 255, .1); color: #fff; }
 .workspace-card {
-  background: #202a31;
-  border: 1px solid #2f3d46;
+  background: rgba(255, 255, 255, .07);
+  border: 1px solid rgba(255, 255, 255, .12);
   border-radius: 8px;
   display: grid;
   gap: 8px;
@@ -71,8 +74,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   font-size: 12px;
 }
 .workspace-card select {
-  background: #12181d;
-  border-color: #3d4c55;
+  background: #0f221e;
+  border-color: rgba(255, 255, 255, .16);
   color: #fff;
 }
 .sidebar-user {
@@ -158,6 +161,23 @@ td input { min-width: 120px; }
 .status { background: #e8f4f1; border-radius: 999px; color: var(--accent-dark); display: inline-block; padding: 3px 8px; }
 .notice { background: #ecfdf5; border: 1px solid #bbf7d0; border-radius: 8px; color: #166534; padding: 10px 12px; }
 .notice.error { background: #fff1f2; border-color: #fecdd3; color: #9f1239; }
+.compact-notice {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin: 10px 0;
+}
+.task-job-notice {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.task-job-notice a {
+  color: var(--accent-dark);
+  font-weight: 800;
+  text-decoration: underline;
+}
 
 .ai-head h1 { letter-spacing: 0; }
 .eyebrow {
@@ -179,8 +199,8 @@ td input { min-width: 120px; }
 }
 .ai-command-strip > div {
   align-items: center;
-  background: #151b20;
-  border: 1px solid #263943;
+  background: linear-gradient(145deg, #12312b, #17251f);
+  border: 1px solid rgba(8, 127, 116, .24);
   border-radius: 8px;
   color: #f8fafc;
   display: grid;
@@ -192,6 +212,26 @@ td input { min-width: 120px; }
 .ai-command-strip span { color: #cbd5e1; font-size: 12px; }
 .ai-command-strip strong { font-size: 28px; line-height: 1; }
 .task-queue-panel .searchbar { margin-bottom: 14px; }
+.filter-bar {
+  align-items: center;
+  background: #fbfcfa;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto repeat(5, minmax(128px, 1fr)) auto auto;
+  margin-bottom: 14px;
+  padding: 10px;
+}
+.filter-bar > span {
+  align-items: center;
+  color: var(--accent-dark);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  gap: 5px;
+  white-space: nowrap;
+}
 .batch-create-strip {
   align-items: center;
   background: #f8fafc;
@@ -219,8 +259,8 @@ td input { min-width: 120px; }
   gap: 12px;
 }
 .queue-card {
-  background: #fff;
-  border: 1px solid rgba(31, 42, 48, .12);
+  background: linear-gradient(180deg, #fff, #fbfcfa);
+  border: 1px solid rgba(18, 49, 43, .13);
   border-radius: 8px;
   display: grid;
   gap: 12px;
@@ -237,6 +277,22 @@ td input { min-width: 120px; }
 .status.ready {
   background: #ecfdf5;
   color: #166534;
+}
+.task-status {
+  margin-left: 6px;
+}
+.task-status.queued,
+.task-status.generating {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.task-status.generated {
+  background: #ecfdf5;
+  color: #166534;
+}
+.task-status.failed {
+  background: #fff1f2;
+  color: #9f1239;
 }
 .queue-signals {
   display: flex;
@@ -1333,6 +1389,7 @@ dd { margin: 4px 0 0; }
   .batch-layout,
   .admin-layout,
   .batch-create-strip,
+  .filter-bar,
   .member-add-strip {
     grid-template-columns: 1fr;
   }

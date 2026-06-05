@@ -112,3 +112,27 @@ def test_generation_repairs_invalid_llm_output_without_extra_model_call(monkeypa
     assert len(payload["title"]) in (29, 30)
     assert payload["main_image_tags"] == ["清凉防晒", "透气不闷", "出游好穿"]
     assert payload["color_copy"] == "清爽显白"
+
+
+def test_generation_marks_product_failed_when_model_errors(monkeypatch):
+    class BrokenClient:
+        provider = "openai_compatible"
+        model = "broken"
+
+        def generate_json(self, messages, schema_hint=None):
+            raise RuntimeError("upstream timeout")
+
+    monkeypatch.setattr("app.services.copy_generator.get_llm_client", lambda db=None: BrokenClient())
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    db = Session()
+    product = _add_product(db)
+
+    try:
+        generate_copy_for_product(db, product.id, operator_name="tester")
+    except RuntimeError:
+        pass
+
+    db.refresh(product)
+    assert product.status == "failed"

@@ -310,6 +310,18 @@ def _upsert_copy_output(
     return output
 
 
+def _mark_product_status(db: Session, product_id: int, status: str, operator_name: str) -> Product | None:
+    product = db.get(Product, product_id)
+    if not product:
+        return None
+    product.status = status
+    product.updated_by = operator_name
+    db.add(product)
+    db.commit()
+    db.refresh(product)
+    return product
+
+
 def generate_copy_for_product(
     db: Session,
     product_id: int,
@@ -319,94 +331,103 @@ def generate_copy_for_product(
     product = db.get(Product, product_id)
     if not product:
         raise ValueError("商品不存在")
-    rules = _rules(db, product.workspace_id)
-    product_payload = product_to_dict(product)
-    client = get_llm_client(db)
-    hot_search_context = _resolve_hot_search_context(db, product, use_hot_search)
-    messages = build_generation_messages(
-        product_payload,
-        [rule.content for rule in rules],
-        _history(db, product),
-        hot_search_context,
-    )
-    payload = _normalize_llm_payload(
-        client.generate_json(
-            messages,
-            schema_hint={"product": product_payload, "hot_search": hot_search_context},
-        )
-    )
-    validation = _validate_generated_payload(payload, rules, product)
-    hot_search_context = _merge_hot_search_validation(payload, validation, hot_search_context)
-    if not validation["passed"]:
-        repaired_payload = _locally_repair_payload(payload, product_payload)
-        repaired_validation = _validate_generated_payload(repaired_payload, rules, product)
-        repaired_hot_search_context = _merge_hot_search_validation(
-            repaired_payload,
-            repaired_validation,
+    product.status = "generating"
+    product.updated_by = operator_name
+    db.commit()
+    db.refresh(product)
+    try:
+        rules = _rules(db, product.workspace_id)
+        product_payload = product_to_dict(product)
+        client = get_llm_client(db)
+        hot_search_context = _resolve_hot_search_context(db, product, use_hot_search)
+        messages = build_generation_messages(
+            product_payload,
+            [rule.content for rule in rules],
+            _history(db, product),
             hot_search_context,
         )
-        if repaired_validation["passed"]:
-            payload = repaired_payload
-            validation = repaired_validation
-            hot_search_context = repaired_hot_search_context
-    attempt = 1
-    while (
-        not validation["passed"]
-        and client.provider != "mock"
-        and attempt < _max_attempts_for_client(client)
-    ):
-        repair_messages = _repair_messages(messages, payload, validation)
         payload = _normalize_llm_payload(
             client.generate_json(
-                repair_messages,
-                schema_hint={
-                    "product": product_payload,
-                    "previous": payload,
-                    "validation": validation,
-                    "hot_search": hot_search_context,
-                },
+                messages,
+                schema_hint={"product": product_payload, "hot_search": hot_search_context},
             )
         )
         validation = _validate_generated_payload(payload, rules, product)
         hot_search_context = _merge_hot_search_validation(payload, validation, hot_search_context)
-        attempt += 1
-    if not validation["passed"]:
-        if client.provider == "mock":
-            from app.services.llm.mock_client import MockClient
-
-            payload = _normalize_llm_payload(MockClient().generate_json(messages, schema_hint={"product": product_payload}))
+        if not validation["passed"]:
+            repaired_payload = _locally_repair_payload(payload, product_payload)
+            repaired_validation = _validate_generated_payload(repaired_payload, rules, product)
+            repaired_hot_search_context = _merge_hot_search_validation(
+                repaired_payload,
+                repaired_validation,
+                hot_search_context,
+            )
+            if repaired_validation["passed"]:
+                payload = repaired_payload
+                validation = repaired_validation
+                hot_search_context = repaired_hot_search_context
+        attempt = 1
+        while (
+            not validation["passed"]
+            and client.provider != "mock"
+            and attempt < _max_attempts_for_client(client)
+        ):
+            repair_messages = _repair_messages(messages, payload, validation)
+            payload = _normalize_llm_payload(
+                client.generate_json(
+                    repair_messages,
+                    schema_hint={
+                        "product": product_payload,
+                        "previous": payload,
+                        "validation": validation,
+                        "hot_search": hot_search_context,
+                    },
+                )
+            )
             validation = _validate_generated_payload(payload, rules, product)
             hot_search_context = _merge_hot_search_validation(payload, validation, hot_search_context)
+            attempt += 1
         if not validation["passed"]:
-            raise ValueError({"message": "文案生成后校验未通过", "validation": validation})
-    output = _upsert_copy_output(db, product, payload, operator_name, "model_generated", "模型生成", client)
-    db.add(
-        ValidationResult(
-            product_id=product.id,
-            workspace_id=product.workspace_id,
-            copy_output_id=output.id,
-            passed=validation["passed"],
-            errors_json=validation["errors"],
-            warnings_json=validation["warnings"] + payload.get("warnings", []),
-            checked_by=operator_name,
+            if client.provider == "mock":
+                from app.services.llm.mock_client import MockClient
+
+                payload = _normalize_llm_payload(MockClient().generate_json(messages, schema_hint={"product": product_payload}))
+                validation = _validate_generated_payload(payload, rules, product)
+                hot_search_context = _merge_hot_search_validation(payload, validation, hot_search_context)
+            if not validation["passed"]:
+                raise ValueError({"message": "文案生成后校验未通过", "validation": validation})
+        output = _upsert_copy_output(db, product, payload, operator_name, "model_generated", "模型生成", client)
+        db.add(
+            ValidationResult(
+                product_id=product.id,
+                workspace_id=product.workspace_id,
+                copy_output_id=output.id,
+                passed=validation["passed"],
+                errors_json=validation["errors"],
+                warnings_json=validation["warnings"] + payload.get("warnings", []),
+                checked_by=operator_name,
+            )
         )
-    )
-    db.commit()
-    db.refresh(output)
-    return {
-        "product_id": product.id,
-        "title": output.title,
-        "main_image_tags": output.main_image_tags,
-        "color_copy": output.color_copy,
-        "source_basis": output.source_basis,
-        "warnings": validation["warnings"] + payload.get("warnings", []),
-        "hot_search_enabled": hot_search_context["enabled"],
-        "selected_hot_terms": hot_search_context["selected_hot_terms"],
-        "matched_hot_terms": hot_search_context["matched_hot_terms"],
-        "missing_hot_terms": hot_search_context["missing_hot_terms"],
-        "excluded_hot_terms": hot_search_context["excluded_hot_terms"],
-        "hot_search_source_batch": hot_search_context["hot_search_source_batch"],
-    }
+        db.commit()
+        db.refresh(output)
+        return {
+            "product_id": product.id,
+            "title": output.title,
+            "main_image_tags": output.main_image_tags,
+            "color_copy": output.color_copy,
+            "source_basis": output.source_basis,
+            "warnings": validation["warnings"] + payload.get("warnings", []),
+            "hot_search_enabled": hot_search_context["enabled"],
+            "selected_hot_terms": hot_search_context["selected_hot_terms"],
+            "matched_hot_terms": hot_search_context["matched_hot_terms"],
+            "missing_hot_terms": hot_search_context["missing_hot_terms"],
+            "excluded_hot_terms": hot_search_context["excluded_hot_terms"],
+            "hot_search_source_batch": hot_search_context["hot_search_source_batch"],
+        }
+    except Exception:
+        db.rollback()
+        _mark_product_status(db, product_id, "failed", operator_name)
+        raise
 
 
 def rewrite_copy_for_product(db: Session, product_id: int, instruction: str, operator_name: str = "operator") -> dict:
