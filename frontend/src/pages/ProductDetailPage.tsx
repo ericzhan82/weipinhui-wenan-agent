@@ -5,23 +5,29 @@ import { CopyEditor } from '../components/CopyEditor';
 import { ProductForm } from '../components/ProductForm';
 import { SkuEditor } from '../components/SkuEditor';
 import { VersionPanel } from '../components/VersionPanel';
-import type { CopyOutput, CopyVersion, HotSearchConfig, Product, ValidationResult } from '../types';
+import type { AgentConfig, AgentRun, CopyOutput, CopyVersion, HotSearchConfig, Product, ValidationResult } from '../types';
 
 export function ProductDetailPage({ id }: { id: number }) {
   const [product, setProduct] = useState<Product | null>(null);
   const [loadedSkuIds, setLoadedSkuIds] = useState<number[]>([]);
   const [versions, setVersions] = useState<CopyVersion[]>([]);
   const [hotSearchConfig, setHotSearchConfig] = useState<HotSearchConfig | null>(null);
+  const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(null);
+  const [agentRun, setAgentRun] = useState<AgentRun | null>(null);
   const [message, setMessage] = useState('');
   const [activeBatchNo, setActiveBatchNo] = useState('');
 
   const load = async () => {
-    const [next, config] = await Promise.all([
+    const [next, config, nextAgentConfig, nextAgentRun] = await Promise.all([
       api.product(id),
       api.hotSearchConfig().catch(() => null),
+      api.agentConfig().catch(() => null),
+      api.latestAgentRun(id).catch(() => null),
     ]);
     setProduct(next);
     setHotSearchConfig(config);
+    setAgentConfig(nextAgentConfig);
+    setAgentRun(nextAgentRun);
     setLoadedSkuIds(next.skus.map((sku) => sku.id).filter((skuId): skuId is number => Boolean(skuId)));
     setVersions(await api.versions(id));
   };
@@ -100,9 +106,11 @@ export function ProductDetailPage({ id }: { id: number }) {
       <CopyEditor
         copy={product.copy_output}
         hotSearchConfig={hotSearchConfig}
+        agentConfig={agentConfig}
+        agentRun={agentRun}
         activeBatchNo={activeBatchNo}
-        onGenerate={async (useHotSearch) => {
-          const batch = await api.generateCopyJob(id, useHotSearch);
+        onGenerate={async (useHotSearch, agentMode) => {
+          const batch = await api.generateCopyJob(id, useHotSearch, agentMode);
           setActiveBatchNo(batch.batch_no);
           setMessage(`已加入后台生成队列：${batch.batch_no}`);
           await load();

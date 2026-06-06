@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
+    routes_agent,
     routes_auth,
     routes_copy_batches,
     routes_copies,
@@ -46,6 +47,7 @@ def on_startup() -> None:
 app.include_router(routes_auth.router)
 app.include_router(routes_workspaces.router)
 app.include_router(routes_health.router)
+app.include_router(routes_agent.router)
 app.include_router(routes_llm.router)
 app.include_router(routes_products.router)
 app.include_router(routes_skus.router)

@@ -31,6 +31,7 @@ def create_batch(
         filters,
         overwrite_existing=payload.overwrite_existing,
         use_hot_search=payload.use_hot_search,
+        agent_mode=payload.agent_mode,
     )
 
 

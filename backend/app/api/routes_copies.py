@@ -23,7 +23,13 @@ def generate_copy(product_id: int, payload: CopyGenerateRequest | None = None, c
     if not product or product.workspace_id != context.workspace_id:
         raise HTTPException(404, "商品不存在")
     try:
-        return generate_copy_for_product(db, product_id, operator_name=context.operator_name, use_hot_search=payload.use_hot_search if payload else None)
+        return generate_copy_for_product(
+            db,
+            product_id,
+            operator_name=context.operator_name,
+            use_hot_search=payload.use_hot_search if payload else None,
+            agent_mode=payload.agent_mode if payload else None,
+        )
     except ValueError as exc:
         raise HTTPException(400, detail=exc.args[0]) from exc
     except RuntimeError as exc:
@@ -39,6 +45,7 @@ def generate_copy_job(product_id: int, payload: CopyGenerateRequest | None = Non
             product_id,
             context.operator_name,
             use_hot_search=payload.use_hot_search if payload else None,
+            agent_mode=payload.agent_mode if payload else None,
         )
     except ValueError as exc:
         raise HTTPException(404, detail=str(exc)) from exc

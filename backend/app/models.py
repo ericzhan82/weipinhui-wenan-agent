@@ -201,6 +201,61 @@ class LlmConfig(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
 
 
+class AgentConfig(Base):
+    __tablename__ = "agent_configs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.id"), nullable=True, index=True)
+    enabled_by_default: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    default_agent_mode: Mapped[str] = mapped_column(String(40), default="legacy", index=True)
+    allow_sdk_modes: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    updated_by: Mapped[str | None] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class AgentRun(Base):
+    __tablename__ = "agent_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.id"), nullable=True, index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
+    mode: Mapped[str] = mapped_column(String(40), default="business_agent", index=True)
+    requested_mode: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(40), default="running", index=True)
+    summary: Mapped[str | None] = mapped_column(Text)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str | None] = mapped_column(String(80))
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+    steps: Mapped[list["AgentRunStep"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan"
+    )
+
+
+class AgentRunStep(Base):
+    __tablename__ = "agent_run_steps"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.id"), nullable=True, index=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("agent_runs.id"), index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
+    skill_key: Mapped[str] = mapped_column(String(80), index=True)
+    skill_name: Mapped[str] = mapped_column(String(160))
+    status: Mapped[str] = mapped_column(String(40), default="success", index=True)
+    input_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    output_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+    run: Mapped[AgentRun] = relationship(back_populates="steps")
+
+
 class HotSearchConfig(Base):
     __tablename__ = "hot_search_configs"
 
@@ -307,6 +362,7 @@ class CopyBatch(Base):
     filter_json: Mapped[dict] = mapped_column(JSON, default=dict)
     overwrite_existing: Mapped[bool] = mapped_column(Boolean, default=False)
     use_hot_search: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    agent_mode: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     total_count: Mapped[int] = mapped_column(Integer, default=0)
     pending_count: Mapped[int] = mapped_column(Integer, default=0)
     running_count: Mapped[int] = mapped_column(Integer, default=0)

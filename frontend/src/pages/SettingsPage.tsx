@@ -1,7 +1,7 @@
-import { CheckCircle2, Cpu, KeyRound, Plus, Save, Server, ShieldCheck, SlidersHorizontal } from 'lucide-react';
+import { BrainCircuit, CheckCircle2, Cpu, KeyRound, Plus, Save, Server, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
-import type { LlmConfig, LlmConfigPayload } from '../types';
+import type { AgentConfig, LlmConfig, LlmConfigPayload } from '../types';
 
 const providerPresets = [
   { provider: 'deepseek', display_name: 'DeepSeek', base_url: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
@@ -32,6 +32,7 @@ function getErrorMessage(error: unknown): string {
 export function SettingsPage() {
   const [status, setStatus] = useState<Record<string, unknown>>({});
   const [configs, setConfigs] = useState<LlmConfig[]>([]);
+  const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(null);
   const [draft, setDraft] = useState<LlmConfigPayload>(emptyDraft);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [message, setMessage] = useState('');
@@ -45,9 +46,14 @@ export function SettingsPage() {
 
   const load = async () => {
     try {
-      const [nextStatus, nextConfigs] = await Promise.all([api.llmStatus(), api.llmConfigs()]);
+      const [nextStatus, nextConfigs, nextAgentConfig] = await Promise.all([
+        api.llmStatus(),
+        api.llmConfigs(),
+        api.agentConfig().catch(() => null),
+      ]);
       setStatus(nextStatus);
       setConfigs(nextConfigs);
+      setAgentConfig(nextAgentConfig);
       setMessage('');
     } catch (error) {
       setStatus({});
@@ -132,6 +138,30 @@ export function SettingsPage() {
     }
   };
 
+  const saveAgentConfig = async (patch: Partial<AgentConfig>) => {
+    const current = agentConfig || {
+      enabled_by_default: false,
+      default_agent_mode: 'legacy',
+      allow_sdk_modes: false,
+      available_modes: ['legacy', 'business_agent', 'openai_agents', 'claude_agent'],
+    };
+    setBusy(true);
+    setMessage('');
+    try {
+      const next = await api.updateAgentConfig({
+        ...current,
+        ...patch,
+        updated_by: '运营',
+      });
+      setAgentConfig(next);
+      setMessage('Agent 配置已保存');
+    } catch (error) {
+      setMessage(getErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const isErrorMessage =
     message.includes('失败') || message.includes('HTTP') || message.includes('Failed to fetch') || message.includes('无法连接后端');
 
@@ -167,6 +197,48 @@ export function SettingsPage() {
           <KeyRound size={22} />
           <span>API Key</span>
           <strong>{apiKeyState}</strong>
+        </div>
+      </section>
+
+      <section className="panel agent-settings-panel">
+        <div className="panel-head">
+          <div>
+            <h2><BrainCircuit size={18} />Agent 运行时</h2>
+            <p className="muted">默认关闭，开启后生成任务可走业务 Agent 编排；SDK 模式需显式允许。</p>
+          </div>
+        </div>
+        <div className="agent-settings-grid">
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={Boolean(agentConfig?.enabled_by_default)}
+              disabled={busy}
+              onChange={(event) => void saveAgentConfig({ enabled_by_default: event.target.checked })}
+            />
+            默认启用 Agent
+          </label>
+          <label>
+            <span>默认运行时</span>
+            <select
+              value={agentConfig?.default_agent_mode || 'legacy'}
+              disabled={busy}
+              onChange={(event) => void saveAgentConfig({ default_agent_mode: event.target.value })}
+            >
+              <option value="legacy">legacy 稳定旧链路</option>
+              <option value="business_agent">business_agent 业务 Agent</option>
+              <option value="openai_agents">openai_agents OpenAI SDK</option>
+              <option value="claude_agent">claude_agent Claude SDK</option>
+            </select>
+          </label>
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={Boolean(agentConfig?.allow_sdk_modes)}
+              disabled={busy}
+              onChange={(event) => void saveAgentConfig({ allow_sdk_modes: event.target.checked })}
+            />
+            允许 SDK 模式
+          </label>
         </div>
       </section>
 

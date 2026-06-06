@@ -775,6 +775,66 @@ td input { min-width: 120px; }
   font-size: 12px;
   padding: 6px 9px;
 }
+.agent-control {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  background: linear-gradient(135deg, rgba(27, 92, 71, 0.08), rgba(255, 255, 255, 0.92));
+}
+.agent-control.enabled {
+  border-color: rgba(27, 92, 71, 0.32);
+  box-shadow: 0 14px 34px rgba(27, 92, 71, 0.08);
+}
+.agent-control strong {
+  display: block;
+  margin-bottom: 4px;
+}
+.agent-control p {
+  margin: 0;
+  color: var(--muted);
+}
+.agent-run-panel {
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid rgba(27, 92, 71, 0.18);
+  background: #fff;
+}
+.agent-step-list {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  margin: 14px 0 0;
+  list-style: none;
+}
+.agent-step-list li {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+.agent-step-list li.success {
+  border-color: rgba(27, 92, 71, 0.22);
+}
+.agent-step-list li.failed {
+  border-color: rgba(194, 78, 61, 0.32);
+}
+.agent-step-list strong,
+.agent-step-list small {
+  display: block;
+}
+.agent-step-list small,
+.agent-step-list p {
+  color: var(--muted);
+}
+.agent-step-list p {
+  margin: 4px 0 0;
+}
 .ai-task-board {
   display: grid;
   gap: 12px;
@@ -1293,6 +1353,18 @@ small { color: var(--muted); }
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   margin-bottom: 18px;
 }
+.agent-settings-panel {
+  margin-bottom: 18px;
+}
+.agent-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, .8fr) minmax(220px, 1fr) minmax(180px, .8fr);
+  gap: 14px;
+  align-items: end;
+}
+.agent-settings-grid label {
+  min-width: 0;
+}
 .runtime-card {
   background: #fff;
   border: 1px solid #dbe3e8;
@@ -1409,7 +1481,7 @@ dd { margin: 4px 0 0; }
   .context-score { align-items: center; display: flex; flex: none; justify-content: space-between; width: 100%; }
   .context-map, .context-brief, .color-fields { grid-template-columns: 1fr; }
   .ai-workbench .panel-head, .output-head { align-items: stretch; flex-direction: column; }
-  .hot-search-control, .coverage-grid { grid-template-columns: 1fr; }
+  .hot-search-control, .agent-control, .coverage-grid, .agent-settings-grid { grid-template-columns: 1fr; }
   .hot-search-mode { width: 100%; }
   .hot-search-mode button { flex: 1; }
   .hot-search-summary { justify-content: flex-start; }

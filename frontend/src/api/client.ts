@@ -1,4 +1,6 @@
 import type {
+  AgentConfig,
+  AgentRun,
   AuthUser,
   CopyBatch,
   CopyBatchDetail,
@@ -164,15 +166,15 @@ export const api = {
     request<ProductSku>(`/products/${productId}/skus`, { method: 'POST', body: JSON.stringify(payload) }),
   updateSku: (id: number, payload: ProductSku) => request<ProductSku>(`/skus/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   deleteSku: (id: number) => request<{ deleted: boolean }>(`/skus/${id}`, { method: 'DELETE' }),
-  generateCopy: (productId: number, use_hot_search?: boolean) =>
+  generateCopy: (productId: number, use_hot_search?: boolean, agent_mode?: string) =>
     request<CopyOutput & { warnings: unknown[] }>(`/products/${productId}/generate-copy`, {
       method: 'POST',
-      ...(use_hot_search === undefined ? {} : { body: JSON.stringify({ use_hot_search }) }),
+      ...(use_hot_search === undefined && !agent_mode ? {} : { body: JSON.stringify({ use_hot_search, agent_mode }) }),
     }),
-  generateCopyJob: (productId: number, use_hot_search?: boolean) =>
+  generateCopyJob: (productId: number, use_hot_search?: boolean, agent_mode?: string) =>
     request<CopyBatch>(`/products/${productId}/generate-copy-job`, {
       method: 'POST',
-      ...(use_hot_search === undefined ? {} : { body: JSON.stringify({ use_hot_search }) }),
+      ...(use_hot_search === undefined && !agent_mode ? {} : { body: JSON.stringify({ use_hot_search, agent_mode }) }),
     }),
   rewriteCopy: (productId: number, rewrite_instruction: string, operator_name: string) =>
     request<CopyOutput>(`/products/${productId}/rewrite-copy`, {
@@ -211,6 +213,10 @@ export const api = {
   hotSearchConfig: () => request<HotSearchConfig>('/hot-search/config'),
   updateHotSearchConfig: (payload: HotSearchConfig & { updated_by?: string }) =>
     request<HotSearchConfig>('/hot-search/config', { method: 'PUT', body: JSON.stringify(payload) }),
+  agentConfig: () => request<AgentConfig>('/agent/config'),
+  updateAgentConfig: (payload: AgentConfig & { updated_by?: string }) =>
+    request<AgentConfig>('/agent/config', { method: 'PUT', body: JSON.stringify(payload) }),
+  latestAgentRun: (productId: number) => request<AgentRun | null>(`/products/${productId}/agent-runs/latest`),
   importHotSearch: (file: File) => {
     const data = new FormData();
     data.append('file', file);
@@ -222,7 +228,7 @@ export const api = {
     return request<Record<string, unknown>>('/excel/import', { method: 'POST', body: data });
   },
   exportExcel: (keyword = '') => request<{ export_id: string; download_url: string }>(`/excel/export${keyword ? `?keyword=${encodeURIComponent(keyword)}` : ''}`),
-  createCopyBatch: (payload: ProductFilters & { overwrite_existing?: boolean; use_hot_search?: boolean | null }) =>
+  createCopyBatch: (payload: ProductFilters & { overwrite_existing?: boolean; use_hot_search?: boolean | null; agent_mode?: string | null }) =>
     request<CopyBatch>('/copy-batches', { method: 'POST', body: JSON.stringify(payload) }),
   copyBatches: () => request<CopyBatch[]>('/copy-batches'),
   copyBatch: (batchNo: string) => request<CopyBatchDetail>(`/copy-batches/${encodeURIComponent(batchNo)}`),

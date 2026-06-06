@@ -109,6 +109,7 @@ def create_copy_batch(
     filters: dict,
     overwrite_existing: bool = False,
     use_hot_search: bool | None = None,
+    agent_mode: str | None = None,
 ) -> CopyBatch:
     products = _product_query(db, workspace_id, filters)
     batch = CopyBatch(
@@ -118,6 +119,7 @@ def create_copy_batch(
         filter_json=filters,
         overwrite_existing=overwrite_existing,
         use_hot_search=use_hot_search,
+        agent_mode=agent_mode,
         created_by=created_by,
     )
     db.add(batch)
@@ -143,6 +145,7 @@ def create_single_product_batch(
     product_id: int,
     created_by: str,
     use_hot_search: bool | None = None,
+    agent_mode: str | None = None,
 ) -> CopyBatch:
     product = db.get(Product, product_id)
     if not product or product.workspace_id != workspace_id:
@@ -154,6 +157,7 @@ def create_single_product_batch(
         filter_json={"product_id": product_id, "mode": "single"},
         overwrite_existing=True,
         use_hot_search=use_hot_search,
+        agent_mode=agent_mode,
         created_by=created_by,
     )
     product.status = "queued"
@@ -291,6 +295,7 @@ def _process_one() -> bool:
                 item.product_id,
                 operator_name=batch.created_by or "batch",
                 use_hot_search=batch.use_hot_search,
+                agent_mode=batch.agent_mode,
             )
             item.status = "success"
             item.error_message = None

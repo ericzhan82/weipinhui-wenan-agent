@@ -38,6 +38,7 @@ REQUIRED_FILES = [
     "backend/app/schemas.py",
     "backend/app/seed.py",
     "backend/app/api/routes_health.py",
+    "backend/app/api/routes_agent.py",
     "backend/app/api/routes_products.py",
     "backend/app/api/routes_skus.py",
     "backend/app/api/routes_copies.py",
@@ -47,6 +48,7 @@ REQUIRED_FILES = [
     "backend/app/api/routes_learning.py",
     "backend/app/api/routes_llm.py",
     "backend/app/services/copy_generator.py",
+    "backend/app/services/agent_service.py",
     "backend/app/services/copy_batch_service.py",
     "backend/app/services/copy_validator.py",
     "backend/app/services/excel_importer.py",
@@ -127,6 +129,11 @@ def main() -> int:
     for marker in ("LLM_PROVIDER=mock", "LLM_API_KEY=", "POSTGRES_PASSWORD=change_me_strong_password", "WEB_CONCURRENCY=2", "WEB_TIMEOUT=120", "COPY_BATCH_WORKER_CONCURRENCY=1"):
         if marker not in env_example:
             failures.append(f".env.example missing marker: {marker}")
+
+    main_py = (ROOT / "backend/main.py").read_text(encoding="utf-8")
+    for marker in ("routes_agent", "app.include_router(routes_agent.router)"):
+        if marker not in main_py:
+            failures.append(f"backend/main.py missing agent route marker: {marker}")
 
     gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
     for marker in (".env", "data/", "node_modules/", "*.xlsx", "storage/exports/*"):

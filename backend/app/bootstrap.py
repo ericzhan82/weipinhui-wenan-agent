@@ -17,6 +17,9 @@ WORKSPACE_TABLES = [
     "history_cases",
     "rule_suggestions",
     "learning_reports",
+    "agent_configs",
+    "agent_runs",
+    "agent_run_steps",
     "hot_search_configs",
     "hot_search_batches",
     "performance_metrics",
@@ -38,6 +41,10 @@ def ensure_runtime_schema(engine: Engine) -> None:
             columns = {column["name"] for column in inspector.get_columns(table)}
             if "workspace_id" not in columns:
                 connection.execute(text(f"ALTER TABLE {table} ADD COLUMN workspace_id INTEGER"))
+        if "copy_batches" in tables:
+            columns = {column["name"] for column in inspector.get_columns("copy_batches")}
+            if "agent_mode" not in columns:
+                connection.execute(text("ALTER TABLE copy_batches ADD COLUMN agent_mode VARCHAR(40)"))
 
 
 def seed_default_workspace_and_admin(db: Session) -> Workspace:

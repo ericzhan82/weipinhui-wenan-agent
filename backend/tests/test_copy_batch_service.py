@@ -99,6 +99,20 @@ def test_create_single_product_batch_queues_exact_product():
     assert other.status == "draft"
 
 
+def test_create_single_product_batch_keeps_agent_mode():
+    db = _session()
+    workspace = Workspace(name="Default", slug="default")
+    db.add(workspace)
+    db.flush()
+    product = Product(workspace_id=workspace.id, style_no="A100", product_no="P100", category_3="Kids", category_4="Shoes", fba="easy wear")
+    db.add(product)
+    db.commit()
+
+    batch = create_single_product_batch(db, workspace.id, product.id, "tester", agent_mode="business_agent")
+
+    assert batch.agent_mode == "business_agent"
+
+
 def test_recover_running_batches_preserves_canceling_intent():
     db = _session()
     workspace = Workspace(name="Default", slug="default")

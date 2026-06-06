@@ -24,6 +24,11 @@ export type CopyOutput = {
   missing_hot_terms?: string[];
   excluded_hot_terms?: Array<{ keyword: string; reason: string }>;
   hot_search_source_batch?: number | null;
+  agent_mode?: string;
+  agent_run_id?: number;
+  agent_status?: string;
+  agent_reflection?: string;
+  agent_steps?: AgentRunStep[];
 };
 
 export type Product = {
@@ -128,6 +133,45 @@ export type HotSearchConfig = {
   updated_by?: string | null;
 };
 
+export type AgentConfig = {
+  enabled_by_default: boolean;
+  default_agent_mode: string;
+  allow_sdk_modes: boolean;
+  available_modes: string[];
+  updated_by?: string | null;
+};
+
+export type AgentRunStep = {
+  id: number;
+  run_id?: number;
+  product_id?: number;
+  skill_key: string;
+  skill_name: string;
+  status: string;
+  input_json?: Record<string, unknown>;
+  output_json?: Record<string, unknown>;
+  input?: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  error_message?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+};
+
+export type AgentRun = {
+  id: number;
+  workspace_id?: number | null;
+  product_id: number;
+  mode: string;
+  requested_mode?: string | null;
+  status: string;
+  summary?: string | null;
+  error_message?: string | null;
+  created_by?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  steps: AgentRunStep[];
+};
+
 export type WorkspaceRef = {
   id: number;
   name: string;
@@ -184,6 +228,7 @@ export type CopyBatch = {
   filter_json: Record<string, unknown>;
   overwrite_existing: boolean;
   use_hot_search?: boolean | null;
+  agent_mode?: string | null;
   total_count: number;
   pending_count: number;
   running_count: number;

@@ -17,6 +17,7 @@
 - 内置账号登录、角色权限、工作空间隔离。
 - 批量生成任务号、后台队列生成、按任务号导出成功结果。
 - 独立 worker 消费生成队列，单品生成和批量生成均可刷新后恢复状态。
+- 可选业务 Agent 编排，记录上下文检查、规则读取、生成、校验和学习建议步骤；默认关闭，旧生成链路不变。
 - SKC/颜色素材新增、编辑、删除。
 - mock 模式文案生成；数据库模型配置优先调用外部模型。
 - 文案在线编辑、保存、重写、校验。
@@ -38,6 +39,7 @@
 - `/learning`：AI 学习回路、偏好摘要和规则优化建议。
 - `/admin`：账号、工作空间和成员角色管理。
 - `/settings`：模型 API 配置，支持不同厂商、Base URL、模型名和 API Key 入库。
+- `/settings`：同时支持 Agent 默认运行时配置；OpenAI/Claude SDK 运行时默认禁用。
 
 ## 本地 Docker 启动
 
@@ -166,6 +168,12 @@ LLM_MODEL=your-model-name
 
 后端不会向前端返回 API Key 明文。
 
+## Agent 运行时说明
+
+系统默认使用 `legacy` 稳定生成链路。需要查看模型生成过程时，可在 `/settings` 开启 `business_agent`，或在单品详情页本次选择“业务 Agent”。该模式会在数据库记录 `agent_runs` 与 `agent_run_steps`，前端展示每个业务 skill 的状态和输出摘要。
+
+`openai_agents` 与 `claude_agent` 是预留 SDK 模式，默认关闭且不作为 Docker 强依赖，避免影响云端稳定部署。需要正式启用时，应先安装对应 SDK、配置 API Key，并在 Agent 设置中开启 `allow_sdk_modes`。
+
 ## mock 模式说明
 
 mock 模式不调用外部服务，会根据 FBA、品类、季节、场景生成稳定可演示文案，适合本地 Docker 验收和无 Key 演示。
@@ -188,6 +196,9 @@ mock 模式不调用外部服务，会根据 FBA、品类、季节、场景生�
 - `learning_reports`
 - `rule_suggestions`
 - `llm_configs`
+- `agent_configs`
+- `agent_runs`
+- `agent_run_steps`
 - `performance_metrics`
 - `workspaces`
 - `users`

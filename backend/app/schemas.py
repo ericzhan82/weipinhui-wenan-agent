@@ -113,6 +113,7 @@ class ValidateCopyRequest(BaseModel):
 
 class CopyGenerateRequest(BaseModel):
     use_hot_search: bool | None = None
+    agent_mode: str | None = None
 
 
 class LoginRequest(BaseModel):
@@ -197,6 +198,7 @@ class CopyBatchCreate(BaseModel):
     copy_state: str | None = None
     overwrite_existing: bool = False
     use_hot_search: bool | None = None
+    agent_mode: str | None = None
 
 
 class CopyBatchRead(BaseModel):
@@ -209,6 +211,7 @@ class CopyBatchRead(BaseModel):
     filter_json: dict[str, Any]
     overwrite_existing: bool
     use_hot_search: bool | None
+    agent_mode: str | None = None
     total_count: int
     pending_count: int
     running_count: int
@@ -245,6 +248,54 @@ class CopyBatchDetail(BaseModel):
 class HotSearchConfigUpdate(BaseModel):
     enabled_by_default: bool
     updated_by: str = "operator"
+
+
+class AgentConfigUpdate(BaseModel):
+    enabled_by_default: bool
+    default_agent_mode: str = "legacy"
+    allow_sdk_modes: bool = False
+    updated_by: str = "operator"
+
+
+class AgentConfigRead(BaseModel):
+    enabled_by_default: bool
+    default_agent_mode: str
+    allow_sdk_modes: bool
+    available_modes: list[str]
+    updated_by: str | None = None
+
+
+class AgentRunStepRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    run_id: int
+    product_id: int
+    skill_key: str
+    skill_name: str
+    status: str
+    input_json: dict[str, Any]
+    output_json: dict[str, Any]
+    error_message: str | None
+    started_at: datetime
+    finished_at: datetime | None
+
+
+class AgentRunRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    workspace_id: int | None
+    product_id: int
+    mode: str
+    requested_mode: str | None
+    status: str
+    summary: str | None
+    error_message: str | None
+    created_by: str | None
+    started_at: datetime
+    finished_at: datetime | None
+    steps: list[AgentRunStepRead] = Field(default_factory=list)
 
 
 class HistoryCaseCreate(BaseModel):

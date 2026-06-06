@@ -17,7 +17,7 @@ import {
   Wand2,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import type { CopyBatch, CopyOutput, HotSearchConfig, ValidationResult } from '../types';
+import type { AgentConfig, AgentRun, AgentRunStep, CopyBatch, CopyOutput, HotSearchConfig, ValidationResult } from '../types';
 import { ValidationPanel } from './ValidationPanel';
 
 const generationSteps = [
@@ -43,14 +43,20 @@ type HotSearchMode = 'global' | 'on' | 'off';
 type Props = {
   copy?: CopyOutput | null;
   hotSearchConfig?: HotSearchConfig | null;
+  agentConfig?: AgentConfig | null;
+  agentRun?: AgentRun | null;
   activeBatchNo?: string;
-  onGenerate: (useHotSearch?: boolean) => Promise<CopyOutput | CopyBatch | void>;
+  onGenerate: (useHotSearch?: boolean, agentMode?: string) => Promise<CopyOutput | CopyBatch | void>;
   onRewrite: (instruction: string) => Promise<CopyOutput | void>;
   onSave: (payload: { title: string; main_image_tags: string[]; color_copy: string; operator_name: string; change_reason: string }) => Promise<void>;
   onValidate: (payload: Partial<CopyOutput> & { operator_name: string }) => Promise<ValidationResult>;
 };
 
-export function CopyEditor({ copy, hotSearchConfig, activeBatchNo, onGenerate, onRewrite, onSave, onValidate }: Props) {
+function stepOutput(step: AgentRunStep) {
+  return step.output_json || step.output || {};
+}
+
+export function CopyEditor({ copy, hotSearchConfig, agentConfig, agentRun, activeBatchNo, onGenerate, onRewrite, onSave, onValidate }: Props) {
   const [title, setTitle] = useState('');
   const [tags, setTags] = useState(['', '', '']);
   const [colorCopy, setColorCopy] = useState('');
@@ -66,6 +72,7 @@ export function CopyEditor({ copy, hotSearchConfig, activeBatchNo, onGenerate, o
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [lastDuration, setLastDuration] = useState<number | null>(null);
   const [hotSearchMode, setHotSearchMode] = useState<HotSearchMode>('global');
+  const [agentMode, setAgentMode] = useState('legacy');
 
   useEffect(() => {
     setTitle(copy?.title || '');
@@ -117,6 +124,14 @@ export function CopyEditor({ copy, hotSearchConfig, activeBatchNo, onGenerate, o
     : hotSearchMode === 'on'
       ? '本次手动开启'
       : '本次手动关闭';
+  const agentModeText = agentMode === 'legacy'
+    ? '稳定旧链路'
+    : agentMode === 'business_agent'
+      ? '业务 Agent'
+      : agentMode === 'openai_agents'
+        ? 'OpenAI Agents SDK'
+        : 'Claude Agent SDK';
+  const visibleAgentSteps = copy?.agent_steps?.length ? copy.agent_steps : agentRun?.steps || [];
 
   const processProgress = processStatus === 'done'
     ? 100
@@ -169,7 +184,7 @@ export function CopyEditor({ copy, hotSearchConfig, activeBatchNo, onGenerate, o
           <p className="muted">把商品资料交给模型生成首版文案，再由运营按意图接管和定稿。</p>
         </div>
         <div className="toolbar">
-          <button className="primary" title="生成文案" disabled={Boolean(busyAction)} onClick={() => runAction('generate', async () => onGenerate(hotSearchOverride))}>
+          <button className="primary" title="生成文案" disabled={Boolean(busyAction)} onClick={() => runAction('generate', async () => onGenerate(hotSearchOverride, agentMode))}>
             <Sparkles size={16} />{busyAction === 'generate' ? '生成中' : '启动生成'}
           </button>
           <button title="重写文案" disabled={Boolean(busyAction)} onClick={() => runAction('rewrite', async () => { await onRewrite(instruction); })}>
@@ -223,6 +238,40 @@ export function CopyEditor({ copy, hotSearchConfig, activeBatchNo, onGenerate, o
           <span>{hotSearchModeText}</span>
           <span>批次：{copy?.hot_search_source_batch ? `#${copy.hot_search_source_batch}` : '生成后显示'}</span>
           <span>可用词：{hasHotSearchResult ? selectedHotTerms.length : '生成后显示'}</span>
+        </div>
+      </div>
+      <div className={`agent-control ${agentMode !== 'legacy' ? 'enabled' : ''}`}>
+        <div>
+          <strong>Agent 运行时</strong>
+          <p>
+            {agentMode === 'legacy'
+              ? '沿用当前稳定生成流程，不额外记录 Agent 编排。'
+              : '启用业务 Agent 编排，记录每个 skill 的输入摘要、输出摘要和状态。'}
+          </p>
+        </div>
+        <div className="hot-search-mode" role="group" aria-label="Agent 运行模式">
+          {[
+            ['legacy', '稳定链路'],
+            ['business_agent', '业务 Agent'],
+            ['openai_agents', 'OpenAI SDK'],
+            ['claude_agent', 'Claude SDK'],
+          ].map(([mode, label]) => (
+            <button
+              type="button"
+              key={mode}
+              className={agentMode === mode ? 'active' : ''}
+              disabled={(mode === 'openai_agents' || mode === 'claude_agent') && !agentConfig?.allow_sdk_modes}
+              title={(mode === 'openai_agents' || mode === 'claude_agent') && !agentConfig?.allow_sdk_modes ? 'SDK 模式默认关闭，请先在设置页开启' : label}
+              onClick={() => setAgentMode(mode)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="hot-search-summary">
+          <span>{agentModeText}</span>
+          <span>全局默认：{agentConfig?.enabled_by_default ? agentConfig.default_agent_mode : 'legacy'}</span>
+          <span>最近运行：{agentRun ? `#${agentRun.id} ${agentRun.status}` : '暂无'}</span>
         </div>
       </div>
       <div className="ai-task-board">
@@ -303,6 +352,34 @@ export function CopyEditor({ copy, hotSearchConfig, activeBatchNo, onGenerate, o
           <span><b>依据</b>{copy?.source_basis || '生成后展示模型依据'}</span>
         </div>
       </div>
+      {visibleAgentSteps.length > 0 && (
+        <div className="agent-run-panel">
+          <div className="coverage-head">
+            <div>
+              <h3>Agent 运行轨迹</h3>
+              <p>{copy?.agent_reflection || agentRun?.summary || '展示最近一次 Agent 编排过程中调用的业务技能。'}</p>
+            </div>
+            <span className={agentRun?.status === 'failed' ? 'coverage-badge' : 'coverage-badge on'}>
+              {copy?.agent_mode || agentRun?.mode || 'business_agent'}
+            </span>
+          </div>
+          <ol className="agent-step-list">
+            {visibleAgentSteps.map((step) => {
+              const output = stepOutput(step);
+              return (
+                <li key={step.id} className={step.status}>
+                  <span>{step.status === 'success' ? <CheckCircle2 size={16} /> : step.status === 'failed' ? <AlertTriangle size={16} /> : <Loader2 size={16} className="spin" />}</span>
+                  <div>
+                    <strong>{step.skill_name}</strong>
+                    <small>{step.skill_key}</small>
+                    <p>{Object.entries(output).slice(0, 3).map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join('、') : String(value)}`).join('；') || step.error_message || '等待输出'}</p>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      )}
       <div className={`hot-search-coverage ${hasHotSearchResult ? 'ready' : ''}`}>
         <div className="coverage-head">
           <div>

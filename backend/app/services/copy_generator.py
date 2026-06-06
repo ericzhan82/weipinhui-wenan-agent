@@ -327,6 +327,35 @@ def generate_copy_for_product(
     product_id: int,
     operator_name: str = "system",
     use_hot_search: bool | None = None,
+    agent_mode: str | None = None,
+) -> dict:
+    product = db.get(Product, product_id)
+    if not product:
+        raise ValueError("商品不存在")
+    from app.services.agent_service import (
+        AGENT_MODE_BUSINESS,
+        AGENT_MODE_LEGACY,
+        SDK_AGENT_MODES,
+        resolve_agent_mode,
+        run_business_agent_generation,
+        run_sdk_agent_generation,
+    )
+
+    resolved_mode = resolve_agent_mode(db, product.workspace_id, agent_mode)
+    if resolved_mode == AGENT_MODE_LEGACY:
+        return _generate_copy_for_product_legacy(db, product_id, operator_name, use_hot_search)
+    if resolved_mode == AGENT_MODE_BUSINESS:
+        return run_business_agent_generation(db, product_id, operator_name, use_hot_search, requested_mode=agent_mode)
+    if resolved_mode in SDK_AGENT_MODES:
+        run_sdk_agent_generation(resolved_mode)
+    raise ValueError(f"未知 Agent 模式：{resolved_mode}")
+
+
+def _generate_copy_for_product_legacy(
+    db: Session,
+    product_id: int,
+    operator_name: str = "system",
+    use_hot_search: bool | None = None,
 ) -> dict:
     product = db.get(Product, product_id)
     if not product:

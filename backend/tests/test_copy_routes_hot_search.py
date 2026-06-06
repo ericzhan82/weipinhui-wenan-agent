@@ -25,9 +25,10 @@ def _context():
 def test_generate_copy_route_passes_hot_search_override(monkeypatch):
     captured = {}
 
-    def fake_generate_copy_for_product(db, product_id, operator_name="system", use_hot_search=None):
+    def fake_generate_copy_for_product(db, product_id, operator_name="system", use_hot_search=None, agent_mode=None):
         captured["product_id"] = product_id
         captured["use_hot_search"] = use_hot_search
+        captured["agent_mode"] = agent_mode
         return {"product_id": product_id, "hot_search_enabled": bool(use_hot_search)}
 
     def override_db():
@@ -43,5 +44,5 @@ def test_generate_copy_route_passes_hot_search_override(monkeypatch):
     response = client.post("/api/products/7/generate-copy", json={"use_hot_search": True})
 
     assert response.status_code == 200
-    assert captured == {"product_id": 7, "use_hot_search": True}
+    assert captured == {"product_id": 7, "use_hot_search": True, "agent_mode": None}
     assert response.json()["hot_search_enabled"] is True

@@ -105,6 +105,20 @@ def main() -> int:
         raise AssertionError("mock llm activation failed")
     out["llm"] = requests.get(base + "/llm/status", headers=headers, timeout=10).json()["provider"]
 
+    agent_config_response = requests.put(
+        base + "/agent/config",
+        headers=headers,
+        json={
+            "enabled_by_default": False,
+            "default_agent_mode": "legacy",
+            "allow_sdk_modes": False,
+            "updated_by": "smoke",
+        },
+        timeout=10,
+    )
+    agent_config_response.raise_for_status()
+    out["agentDefaultReset"] = agent_config_response.json()["default_agent_mode"]
+
     config_response = requests.get(base + "/hot-search/config", headers=headers, timeout=10)
     config_response.raise_for_status()
     out["hotSearchDefaultBefore"] = config_response.json()["enabled_by_default"]
@@ -180,6 +194,26 @@ def main() -> int:
     if hot_detail["batch"]["success_count"] != 1:
         raise AssertionError("hot search generate job did not finish successfully")
     hot_copy = requests.get(f"{base}/products/{created['id']}", headers=headers, timeout=10).json()["copy_output"]
+
+    agent_copy_response = requests.post(
+        f"{base}/products/{created['id']}/generate-copy-job",
+        headers=headers,
+        json={"agent_mode": "business_agent"},
+        timeout=10,
+    )
+    agent_copy_response.raise_for_status()
+    agent_batch = agent_copy_response.json()
+    agent_detail = wait_batch(base, headers, agent_batch["batch_no"])
+    out["agentBatchStatus"] = agent_detail["batch"]["status"]
+    if agent_detail["batch"]["success_count"] != 1:
+        raise AssertionError("business agent generate job did not finish successfully")
+    latest_agent_response = requests.get(f"{base}/products/{created['id']}/agent-runs/latest", headers=headers, timeout=10)
+    latest_agent_response.raise_for_status()
+    latest_agent = latest_agent_response.json()
+    out["agentRunStatus"] = latest_agent["status"]
+    out["agentStepCount"] = len(latest_agent["steps"])
+    if latest_agent["mode"] != "business_agent" or out["agentStepCount"] < 4:
+        raise AssertionError("business agent run was not recorded")
 
     validation_response = requests.post(
         f"{base}/products/{created['id']}/validate-copy",
